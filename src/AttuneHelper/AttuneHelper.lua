@@ -524,60 +524,45 @@ frame:SetScript("OnEvent",function(self,event_name_merchant) if event_name_merch
 
 AttuneHelper:RegisterEvent("ADDON_LOADED"); AttuneHelper:RegisterEvent("PLAYER_REGEN_DISABLED"); AttuneHelper:RegisterEvent("PLAYER_REGEN_ENABLED"); AttuneHelper:RegisterEvent("PLAYER_LOGIN"); AttuneHelper:RegisterEvent("BAG_UPDATE"); AttuneHelper:RegisterEvent("CHAT_MSG_SYSTEM")
 AttuneHelper:SetScript("OnEvent",function(self,event_name_attune, arg1)
-    if event_name_attune == "ADDON_LOADED" and arg1 == "AttuneHelper" then
-      -- ... (existing ADDON_LOADED logic remains the same)
-      if AttuneHelperDB["Background Style"] == nil then AttuneHelperDB["Background Style"] = "Tooltip" end
-      if type(AttuneHelperDB["Background Color"]) ~= "table" or #AttuneHelperDB["Background Color"] < 4 then AttuneHelperDB["Background Color"] = {0,0,0,0.8} end
-      if AttuneHelperDB["Button Theme"] == nil then AttuneHelperDB["Button Theme"] = "Normal" end
-      if AttuneHelperDB["Disable Two-Handers"] == nil then AttuneHelperDB["Disable Two-Handers"] = 0 end
-      if AttuneHelperDB["Disable Auto-Equip Mythic BoE"] == nil then AttuneHelperDB["Disable Auto-Equip Mythic BoE"] = 1 end
-  
-      if type(AttuneHelperDB.AllowedForgeTypes) ~= "table" then
-          AttuneHelperDB.AllowedForgeTypes = {}
-          for keyName, defaultValue in pairs(defaultForgeKeysAndValues) do
-              AttuneHelperDB.AllowedForgeTypes[keyName] = defaultValue
-          end
-      end
-      LoadAllSettings()
-      self:UnregisterEvent("ADDON_LOADED")
+  if event_name_attune == "ADDON_LOADED" and arg1 == "AttuneHelper" then
+    if AttuneHelperDB["Background Style"] == nil then AttuneHelperDB["Background Style"] = "Tooltip" end
+    if type(AttuneHelperDB["Background Color"]) ~= "table" or #AttuneHelperDB["Background Color"] < 4 then AttuneHelperDB["Background Color"] = {0,0,0,0.8} end
+    if AttuneHelperDB["Button Theme"] == nil then AttuneHelperDB["Button Theme"] = "Normal" end
+    if AttuneHelperDB["Disable Two-Handers"] == nil then AttuneHelperDB["Disable Two-Handers"] = 0 end
+    if AttuneHelperDB["Disable Auto-Equip Mythic BoE"] == nil then AttuneHelperDB["Disable Auto-Equip Mythic BoE"] = 1 end
+
+    if type(AttuneHelperDB.AllowedForgeTypes) ~= "table" then
+        AttuneHelperDB.AllowedForgeTypes = {}
+        for keyName, defaultValue in pairs(defaultForgeKeysAndValues) do
+            AttuneHelperDB.AllowedForgeTypes[keyName] = defaultValue
+        end
     end
-  
-    if event_name_attune=="PLAYER_LOGIN" then
-      self:UnregisterEvent("PLAYER_LOGIN")
-      AH_wait(3, function() synEXTloaded = true; for bag_id = 0, 4 do UpdateBagCache(bag_id) end; UpdateItemCountText() end)
-    elseif event_name_attune=="BAG_UPDATE" then
-      if not(synEXTloaded) then return false end
-      local bagID = arg1
-      UpdateBagCache(bagID)
-      UpdateItemCountText()
-  
-      local now = GetTime()
-      if now - (deltaTime or 0) < CHAT_MSG_SYSTEM_THROTTLE then
-          return
-      end
-      deltaTime = now
-  
-      RequestDebouncedAutoEquipAll()
-    elseif event_name_attune=="CHAT_MSG_SYSTEM" then -- Removed other conditions, RequestDebouncedAutoEquipAll handles them
-      if arg1 and arg1:find("attuned") then
-          RequestDebouncedAutoEquipAll()
-      end
-    elseif event_name_attune == "PLAYER_REGEN_ENABLED" then
-      RequestDebouncedAutoEquipAll()
-    end
-  end)
+    LoadAllSettings()
+    self:UnregisterEvent("ADDON_LOADED")
+  end 
 
   if event_name_attune=="PLAYER_LOGIN" then
-   self:UnregisterEvent("PLAYER_LOGIN")
-   AH_wait(3, function() synEXTloaded = true; for bag_id = 0, 4 do UpdateBagCache(bag_id) end; UpdateItemCountText() end)
+    self:UnregisterEvent("PLAYER_LOGIN")
+    AH_wait(3, function() synEXTloaded = true; for bag_id = 0, 4 do UpdateBagCache(bag_id) end; UpdateItemCountText() end)
   elseif event_name_attune=="BAG_UPDATE" then
-   if not(synEXTloaded) then return false end; local bagID = arg1; UpdateBagCache(bagID); UpdateItemCountText()
-   local now=GetTime(); if now-(deltaTime or 0) < CHAT_MSG_SYSTEM_THROTTLE then return end; deltaTime=now
-   if AttuneHelperDB["Auto Equip Attunable After Combat"]==1 and not InCombatLockdown() then if EquipAllButton and EquipAllButton:GetScript("OnClick") then EquipAllButton:GetScript("OnClick")() end end
-  elseif event_name_attune=="CHAT_MSG_SYSTEM" and AttuneHelperDB["Auto Equip Attunable After Combat"]==1 and not InCombatLockdown() then
-   if arg1 and arg1:find("attuned") then if EquipAllButton and EquipAllButton:GetScript("OnClick") then EquipAllButton:GetScript("OnClick")() end end
-  elseif event_name_attune == "PLAYER_REGEN_ENABLED" and AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 and not InCombatLockdown() then
-   if EquipAllButton and EquipAllButton:GetScript("OnClick") then EquipAllButton:GetScript("OnClick")() end
+    if not(synEXTloaded) then return false end
+    local bagID = arg1
+    UpdateBagCache(bagID)
+    UpdateItemCountText()
+
+    local now = GetTime()
+    if now - (deltaTime or 0) < CHAT_MSG_SYSTEM_THROTTLE then
+        return
+    end
+    deltaTime = now
+
+    RequestDebouncedAutoEquipAll()
+  elseif event_name_attune=="CHAT_MSG_SYSTEM" then
+    if arg1 and arg1:find("attuned") then
+        RequestDebouncedAutoEquipAll()
+    end
+  elseif event_name_attune == "PLAYER_REGEN_ENABLED" then
+    RequestDebouncedAutoEquipAll()
   end
 end)
 
