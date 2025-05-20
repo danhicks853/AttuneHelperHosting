@@ -31,9 +31,6 @@ local forge_type_checkboxes = {}
 
 local deltaTime = 0
 local CHAT_MSG_SYSTEM_THROTTLE = 0.2
-local AUTO_EQUIP_ALL_DEBOUNCE_TIME = 0.75
-local activeDebounceID = 0
-local scheduledDebounceID = 0 
 local waitTable = {}
 local waitFrame = nil
 local MYTHIC_MIN_ITEMID = 52203
@@ -155,32 +152,6 @@ local function AH_wait(delay, func, ...)
     end)
   end
   table.insert(waitTable,{delay,func,{...}}); return true
-end
-local function DebounceWrapper(myID)
-    -- This function is called by AH_wait after the debounce time
-    -- It checks if it's still the latest scheduled call before proceeding
-    if myID == scheduledDebounceID then
-        -- print("AttuneHelper: Executing debounced EquipAll for ID: " .. myID) -- For debugging
-        if EquipAllButton and EquipAllButton:GetScript("OnClick") then
-            EquipAllButton:GetScript("OnClick")()
-        end
-    else
-        -- print("AttuneHelper: Skipping outdated debounced EquipAll for ID: " .. myID .. ", latest is: " .. scheduledDebounceID) -- For debugging
-    end
-end
-
-local function RequestDebouncedAutoEquipAll()
-    -- This function is called by events that want to trigger an auto-equip
-    if InCombatLockdown() or AttuneHelperDB["Auto Equip Attunable After Combat"] ~= 1 then
-        return -- Don't schedule if auto-equip is off or in combat
-    end
-
-    activeDebounceID = activeDebounceID + 1 -- Generate a new unique ID for this request
-    scheduledDebounceID = activeDebounceID  -- Mark this new ID as the one we want to run
-
-    -- print("AttuneHelper: Scheduling debounced EquipAll with ID: " .. scheduledDebounceID .. " in " .. AUTO_EQUIP_ALL_DEBOUNCE_TIME .. "s") -- For debugging
-    -- The AH_wait function will call DebounceWrapper with scheduledDebounceID as its argument
-    AH_wait(AUTO_EQUIP_ALL_DEBOUNCE_TIME, DebounceWrapper, scheduledDebounceID)
 end
 
 local function HideEquipPopups()
@@ -539,30 +510,19 @@ AttuneHelper:SetScript("OnEvent",function(self,event_name_attune, arg1)
     end
     LoadAllSettings()
     self:UnregisterEvent("ADDON_LOADED")
-  end 
+  end
 
   if event_name_attune=="PLAYER_LOGIN" then
-    self:UnregisterEvent("PLAYER_LOGIN")
-    AH_wait(3, function() synEXTloaded = true; for bag_id = 0, 4 do UpdateBagCache(bag_id) end; UpdateItemCountText() end)
+   self:UnregisterEvent("PLAYER_LOGIN")
+   AH_wait(3, function() synEXTloaded = true; for bag_id = 0, 4 do UpdateBagCache(bag_id) end; UpdateItemCountText() end)
   elseif event_name_attune=="BAG_UPDATE" then
-    if not(synEXTloaded) then return false end
-    local bagID = arg1
-    UpdateBagCache(bagID)
-    UpdateItemCountText()
-
-    local now = GetTime()
-    if now - (deltaTime or 0) < CHAT_MSG_SYSTEM_THROTTLE then
-        return
-    end
-    deltaTime = now
-
-    RequestDebouncedAutoEquipAll()
-  elseif event_name_attune=="CHAT_MSG_SYSTEM" then
-    if arg1 and arg1:find("attuned") then
-        RequestDebouncedAutoEquipAll()
-    end
-  elseif event_name_attune == "PLAYER_REGEN_ENABLED" then
-    RequestDebouncedAutoEquipAll()
+   if not(synEXTloaded) then return false end; local bagID = arg1; UpdateBagCache(bagID); UpdateItemCountText()
+   local now=GetTime(); if now-(deltaTime or 0) < CHAT_MSG_SYSTEM_THROTTLE then return end; deltaTime=now
+   if AttuneHelperDB["Auto Equip Attunable After Combat"]==1 then if EquipAllButton and EquipAllButton:GetScript("OnClick") then EquipAllButton:GetScript("OnClick")() end end
+  elseif event_name_attune=="CHAT_MSG_SYSTEM" and AttuneHelperDB["Auto Equip Attunable After Combat"]==1 then
+   if arg1 and arg1:find("WowExt v") then synEXTloaded = true end
+  elseif event_name_attune == "PLAYER_REGEN_ENABLED" and AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 then
+   if EquipAllButton and EquipAllButton:GetScript("OnClick") then EquipAllButton:GetScript("OnClick")() end
   end
 end)
 
