@@ -378,7 +378,7 @@ local function EquipItemInInventory(slotName)
           local expected=localItemTypeToSlotMapping[equipSlot]
           if expected==slotName or (type(expected)=="table" and tContains(expected,slotName)) then
             local ok=(phase=="attunable" and SynastriaCoreLib.IsAttunable(link)) or (phase=="set" and AHSetList[GetItemInfoCustom(link)])
-            if ok then local eq=slotNumberMapping[slotName] or GetInventorySlotInfo(slotName); UseContainerItem(rec.bag, rec.slot); EquipPendingItem(0); ConfirmBindOnUse(); if phase=="attunable" then HideEquipPopups() end; return end
+            if ok then local eq=slotNumberMapping[slotName] or GetInventorySlotInfo(slotName); EquipItemByName(link,eq); EquipPendingItem(0); ConfirmBindOnUse(); if phase=="attunable" then HideEquipPopups() end; return end
           end
         end
       end
