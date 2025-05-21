@@ -389,6 +389,8 @@ end
 local SWAP_THROTTLE = 0.1
 EquipAllButton = CreateButton("AttuneHelperEquipAllButton",AttuneHelper,"Equip Attunables",AttuneHelper,"TOP",0,-5,nil,nil,nil,1.3)
 EquipAllButton:SetScript("OnClick", function()
+  if MerchantFrame and MerchantFrame:IsShown() then return end
+  
   for bag = 0, 4 do UpdateBagCache(bag) end
   local slotsList = {"HeadSlot","NeckSlot","ShoulderSlot","BackSlot","ChestSlot","WristSlot","HandsSlot","WaistSlot","LegsSlot","FeetSlot","Finger0Slot","Finger1Slot","Trinket0Slot","Trinket1Slot","MainHandSlot","SecondaryHandSlot","RangedSlot"}
   local twoHanderEquippedInMainHandThisCycle = false
