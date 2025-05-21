@@ -487,8 +487,8 @@ local function UpdateItemCountText() local c = 0; for bagID, bagTbl in pairs(bag
 AH_wait(4,UpdateItemCountText)
 
 SLASH_ATTUNEHELPER1="/ath"; SlashCmdList["ATTUNEHELPER"]=function(msg) local cmd=msg:lower():match("^(%S*)"); if cmd=="reset" then AttuneHelper:ClearAllPoints(); AttuneHelper:SetPoint("CENTER"); print("ATH: UI position reset.") elseif cmd=="show" then AttuneHelper:Show() elseif cmd=="hide" then AttuneHelper:Hide() elseif cmd=="sort" then if SortInventoryButton and SortInventoryButton:GetScript("OnClick") then SortInventoryButton:GetScript("OnClick")() end elseif cmd=="equip" then if EquipAllButton and EquipAllButton:GetScript("OnClick") then EquipAllButton:GetScript("OnClick")() end elseif cmd=="vendor" then if VendorAttunedButton and VendorAttunedButton:GetScript("OnClick") then VendorAttunedButton:GetScript("OnClick")() end else print("/ath show | hide | reset | equip | sort | vendor") end end
-SLASH_AHIGNORE1="/AHIgnore"; SlashCmdList["AHIGNORE"]=function(msg) local n=GetItemInfoCustom(msg); if not n then print("Invalid item link."); return end; AHIgnoreList[n]=not AHIgnoreList[n]; print(n..(AHIgnoreList[n] and " is now ignored." or " will no longer be ignored.")) end
-SLASH_AHSET1="/AHSet"; SlashCmdList["AHSET"]=function(msg) local n=GetItemInfoCustom(msg); if not n then print("Invalid item link."); return end; AHSetList[n]=not AHSetList[n]; print(n..(AHSetList[n] and " is now included in your gear set." or " is no longer included in your gear set.")) end
+SLASH_AHIGNORE1="/AHIgnore"; SlashCmdList["AHIGNORE"]=function(msg) local n=GetItemInfo(msg); if not n then print("Invalid item link."); return end; AHIgnoreList[n]=not AHIgnoreList[n]; print(n..(AHIgnoreList[n] and " is now ignored." or " will no longer be ignored.")) end
+SLASH_AHSET1="/AHSet"; SlashCmdList["AHSET"]=function(msg) local n=GetItemInfo(msg); if not n then print("Invalid item link."); return end; AHSetList[n]=not AHSetList[n]; print(n..(AHSetList[n] and " is now included in your gear set." or " is no longer included in your gear set.")) end
 SLASH_ATH2H1 = "/ah2h"; SlashCmdList["ATH2H"] = function(msg) local f = AttuneHelperDB; f["Disable Two-Handers"] = 1 - (f["Disable Two-Handers"] or 0); print("|cffffd200[AttuneHelper]|r Two-handers equipping " .. (f["Disable Two-Handers"] == 1 and "disabled" or "enabled")) end
 local frame=CreateFrame("Frame"); frame:RegisterEvent("MERCHANT_SHOW"); frame:RegisterEvent("MERCHANT_CLOSED"); frame:RegisterEvent("MERCHANT_UPDATE")
 frame:SetScript("OnEvent",function(self,event_name_merchant) if event_name_merchant=="MERCHANT_SHOW" or event_name_merchant=="MERCHANT_UPDATE" then for i=1,GetNumBuybackItems() do local link=GetBuybackItemLink(i); if link then local name=GetItemInfoCustom(link); if AHIgnoreList[name] or AHSetList[name] then BuybackItem(i); print("|cffff0000[Attune Helper]|r Bought back your ignored/set item: " .. name); return end end end end end)
@@ -520,7 +520,6 @@ AttuneHelper:SetScript("OnEvent",function(self,event_name_attune, arg1)
    local now=GetTime(); if now-(deltaTime or 0) < CHAT_MSG_SYSTEM_THROTTLE then return end; deltaTime=now
    if AttuneHelperDB["Auto Equip Attunable After Combat"]==1 then if EquipAllButton and EquipAllButton:GetScript("OnClick") then EquipAllButton:GetScript("OnClick")() end end
   elseif event_name_attune=="CHAT_MSG_SYSTEM" and AttuneHelperDB["Auto Equip Attunable After Combat"]==1 then
-   if arg1 and arg1:find("WowExt v") then synEXTloaded = true end
   elseif event_name_attune == "PLAYER_REGEN_ENABLED" and AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 then
    if EquipAllButton and EquipAllButton:GetScript("OnClick") then EquipAllButton:GetScript("OnClick")() end
   end
