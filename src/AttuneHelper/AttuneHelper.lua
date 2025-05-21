@@ -154,6 +154,20 @@ local function AH_wait(delay, func, ...)
   table.insert(waitTable,{delay,func,{...}}); return true
 end
 
+local function IsItemForgeAllowed(itemLink, currentAllowedForgeTypes)
+  local forgeLevel = FORGE_LEVEL_MAP.BASE
+  if _G.GetItemLinkTitanforge then
+      forgeLevel = GetItemLinkTitanforge(itemLink) or FORGE_LEVEL_MAP.BASE
+  end
+  local allowedTypes = currentAllowedForgeTypes or {}
+  if forgeLevel == FORGE_LEVEL_MAP.BASE and allowedTypes.BASE == true then return true
+  elseif forgeLevel == FORGE_LEVEL_MAP.TITANFORGED and allowedTypes.TITANFORGED == true then return true
+  elseif forgeLevel == FORGE_LEVEL_MAP.WARFORGED and allowedTypes.WARFORGED == true then return true
+  elseif forgeLevel == FORGE_LEVEL_MAP.LIGHTFORGED and allowedTypes.LIGHTFORGED == true then return true
+  end
+  return false
+end
+
 local function HideEquipPopups()
   StaticPopup_Hide("EQUIP_BIND"); StaticPopup_Hide("AUTOEQUIP_BIND")
   for i = 1, STATICPOPUP_NUMDIALOGS do
@@ -364,7 +378,7 @@ local function EquipItemInInventory(slotName)
           local expected=localItemTypeToSlotMapping[equipSlot]
           if expected==slotName or (type(expected)=="table" and tContains(expected,slotName)) then
             local ok=(phase=="attunable" and SynastriaCoreLib.IsAttunable(link)) or (phase=="set" and AHSetList[GetItemInfoCustom(link)])
-            if ok then local eq=slotNumberMapping[slotName] or GetInventorySlotInfo(slotName); EquipItemByName(link,eq); EquipPendingItem(0); ConfirmBindOnUse(); if phase=="attunable" then HideEquipPopups() end; return end
+            if ok then local eq=slotNumberMapping[slotName] or GetInventorySlotInfo(slotName); UseContainerItem(rec.bag, rec.slot); EquipPendingItem(0); ConfirmBindOnUse(); if phase=="attunable" then HideEquipPopups() end; return end
           end
         end
       end
@@ -416,46 +430,69 @@ EquipAllButton:SetScript("OnClick", function()
   local function checkAndEquip(slotName)
     if AttuneHelperDB[slotName] == 1 then return end
     if slotName == "SecondaryHandSlot" and twoHanderEquippedInMainHandThisCycle then return end
-    local mainHandPlayerSlotId = GetInventorySlotInfo("MainHandSlot"); local currentMainHandItemLink = GetInventoryItemLink("player", mainHandPlayerSlotId); local currentMainHandIsTwoHander = false
-    if currentMainHandItemLink then local _, _, _, _, _, _, _, _, currentMainHandEquipSlot_raw = GetItemInfo(currentMainHandItemLink); if currentMainHandEquipSlot_raw == "INVTYPE_2HWEAPON" then currentMainHandIsTwoHander = true end end
+
+    local mainHandPlayerSlotId = GetInventorySlotInfo("MainHandSlot")
+    local currentMainHandItemLink = GetInventoryItemLink("player", mainHandPlayerSlotId)
+    local currentMainHandIsTwoHander = false
+    if currentMainHAddonTextItemLink then
+        local _, _, _, _, _, _, _, _, currentMainHandEquipSlot_raw = GetItemInfo(currentMainHandItemLink)
+        if currentMainHandEquipSlot_raw == "INVTYPE_2HWEAPON" then currentMainHandIsTwoHander = true end
+    end
     if currentMainHandIsTwoHander and slotName == "SecondaryHandSlot" then return end
-    local invSlotID = GetInventorySlotInfo(slotName); local curLink  = GetInventoryItemLink("player", invSlotID)
+
+    local invSlotID = GetInventorySlotInfo(slotName)
+    local curLink = GetInventoryItemLink("player", invSlotID)
+
     if not curLink or SynastriaCoreLib.IsAttuned(curLink) or not SynastriaCoreLib.IsAttunableBySomeone(curLink) then
-      local candidates = equipSlotCache[slotName] or {}
-      for _, rec in ipairs(candidates) do
-        local shouldProcessCandidate = true
-        if currentMainHandIsTwoHander and slotName == "MainHandSlot" then if rec.equipSlot ~= "INVTYPE_2HWEAPON" then shouldProcessCandidate = false end end
-        if shouldProcessCandidate then
-          if rec.inSet or rec.isAttunable then
-            local itemName, itemLink, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount, itemEquipLoc, itemTexture, itemSellPrice, classID, subClassID, originalItemBindType = GetItemInfo(rec.link)
-            local itemID = nil; if rec.link then itemID = tonumber(string.match(rec.link, "item:(%d+):")) end
-            local isConsideredMythic = false; if itemID and itemID >= MYTHIC_MIN_ITEMID then isConsideredMythic = true end
-            local itemWillBecomeBound = WillBecomeBoundOnEquip(rec.link, rec.bag, rec.slot)
-            local disableAutoEquipMythicBoESetting = AttuneHelperDB["Disable Auto-Equip Mythic BoE"]
-            local passesMythicBoECheck = true
-            if disableAutoEquipMythicBoESetting == 1 and isConsideredMythic and itemWillBecomeBound then
-                passesMythicBoECheck = false
+        local candidates = equipSlotCache[slotName] or {}
+        local currentAllowedForgeTypes = AttuneHelperDB.AllowedForgeTypes
+
+        for _, rec in ipairs(candidates) do
+            local shouldProcessCandidate = true
+            if currentMainHandIsTwoHander and slotName == "MainHandSlot" then
+                if rec.equipSlot ~= "INVTYPE_2HWEAPON" then shouldProcessCandidate = false end
             end
 
-            if passesMythicBoECheck then
-              local forgeLevel = FORGE_LEVEL_MAP.BASE; if _G.GetItemLinkTitanforge then forgeLevel = GetItemLinkTitanforge(rec.link) or FORGE_LEVEL_MAP.BASE end
-              local allowedTypes = AttuneHelperDB.AllowedForgeTypes or {}; local canEquipBasedOnForgePolicy = false
-              if forgeLevel == FORGE_LEVEL_MAP.BASE and allowedTypes.BASE == true then canEquipBasedOnForgePolicy = true
-              elseif forgeLevel == FORGE_LEVEL_MAP.TITANFORGED and allowedTypes.TITANFORGED == true then canEquipBasedOnForgePolicy = true
-              elseif forgeLevel == FORGE_LEVEL_MAP.WARFORGED and allowedTypes.WARFORGED == true then canEquipBasedOnForgePolicy = true
-              elseif forgeLevel == FORGE_LEVEL_MAP.LIGHTFORGED and allowedTypes.LIGHTFORGED == true then canEquipBasedOnForgePolicy = true
-              end
-              if canEquipBasedOnForgePolicy then
-                local eqID = slotNumberMapping[slotName] or invSlotID; EquipItemByName(rec.name, eqID); EquipPendingItem(0); ConfirmBindOnUse(); HideEquipPopups()
-                if slotName == "MainHandSlot" then local _, _, _, _, _, _, _, _, equippedItemEquipSlot = GetItemInfo(rec.link); if equippedItemEquipSlot == "INVTYPE_2HWEAPON" then twoHanderEquippedInMainHandThisCycle = true end end
-                return
-              end
+            if shouldProcessCandidate then
+                if rec.inSet or rec.isAttunable then
+                    if IsItemForgeAllowed(rec.link, currentAllowedForgeTypes) then
+                        local itemName, itemLink_unused, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount, itemEquipLoc, itemTexture, itemSellPrice, classID, subClassID, originalItemBindType = GetItemInfo(rec.link)
+                        
+                        local itemID = nil
+                        if rec.link then itemID = tonumber(string.match(rec.link, "item:(%d+):")) end
+                        
+                        local isConsideredMythic = false
+                        if itemID and itemID >= MYTHIC_MIN_ITEMID then isConsideredMythic = true end
+                        
+                        local itemWillBecomeBound = WillBecomeBoundOnEquip(rec.link, rec.bag, rec.slot)
+                        local disableAutoEquipMythicBoESetting = AttuneHelperDB["Disable Auto-Equip Mythic BoE"]
+                        
+                        local passesNonForgeChecks = true
+                        if disableAutoEquipMythicBoESetting == 1 and isConsideredMythic and itemWillBecomeBound then
+                            passesNonForgeChecks = false
+                        end
+
+                        if passesNonForgeChecks then
+                            UseContainerItem(rec.bag, rec.slot)
+                            EquipPendingItem(0)
+                            ConfirmBindOnUse()
+                            HideEquipPopups()
+
+                            if slotName == "MainHandSlot" then
+                                local _, _, _, _, _, _, _, _, equippedItemEquipSlot = GetItemInfo(rec.link)
+                                if equippedItemEquipSlot == "INVTYPE_2HWEAPON" then
+                                    twoHanderEquippedInMainHandThisCycle = true
+                                end
+                            end
+                            return
+                        end
+                    end
+                end
             end
-          end
         end
-      end
     end
   end
+
   for i, slotName_iter in ipairs(slotsList) do AH_wait(SWAP_THROTTLE * i, checkAndEquip, slotName_iter) end
 end)
 
@@ -516,12 +553,51 @@ AttuneHelper:SetScript("OnEvent",function(self,event_name_attune, arg1)
    self:UnregisterEvent("PLAYER_LOGIN")
    AH_wait(3, function() synEXTloaded = true; for bag_id = 0, 4 do UpdateBagCache(bag_id) end; UpdateItemCountText() end)
   elseif event_name_attune=="BAG_UPDATE" then
-   if not(synEXTloaded) then return false end; local bagID = arg1; UpdateBagCache(bagID); UpdateItemCountText()
-   local now=GetTime(); if now-(deltaTime or 0) < CHAT_MSG_SYSTEM_THROTTLE then return end; deltaTime=now
-   if AttuneHelperDB["Auto Equip Attunable After Combat"]==1 then if EquipAllButton and EquipAllButton:GetScript("OnClick") then EquipAllButton:GetScript("OnClick")() end end
+    if not(synEXTloaded) then return false end
+    local bagID = arg1
+    UpdateBagCache(bagID)
+    UpdateItemCountText()
+    
+    local now = GetTime()
+    if now-(deltaTime or 0) < CHAT_MSG_SYSTEM_THROTTLE then -- CHAT_MSG_SYSTEM_THROTTLE is 0.2
+        return 
+    end
+    deltaTime = now
+    
+    if AttuneHelperDB["Auto Equip Attunable After Combat"]==1 then
+        if EquipAllButton and EquipAllButton:GetScript("OnClick") then
+            AH_wait(0.1, function() -- Using AH_wait with a small delay
+                if EquipAllButton and EquipAllButton:IsVisible() and EquipAllButton:GetScript("OnClick") then
+                     EquipAllButton:GetScript("OnClick")()
+                end
+            end)
+        end
+    end
+
   elseif event_name_attune=="CHAT_MSG_SYSTEM" and AttuneHelperDB["Auto Equip Attunable After Combat"]==1 then
+    -- OPTIONAL: Implement a throttle for CHAT_MSG_SYSTEM if it fires too frequently
+    -- local now_chat = GetTime()
+    -- if now_chat - (chatMsgSystemDelta or 0) < CHAT_MSG_SYSTEM_EVENT_THROTTLE_INTERVAL then 
+    --     return 
+    -- end
+    -- chatMsgSystemDelta = now_chat
+
+    if EquipAllButton and EquipAllButton:GetScript("OnClick") then
+        AH_wait(0.1, function() -- Using AH_wait with a small delay
+            if EquipAllButton and EquipAllButton:IsVisible() and EquipAllButton:GetScript("OnClick") then
+                 EquipAllButton:GetScript("OnClick")()
+            end
+        end)
+    end
+
   elseif event_name_attune == "PLAYER_REGEN_ENABLED" and AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 then
-   if EquipAllButton and EquipAllButton:GetScript("OnClick") then EquipAllButton:GetScript("OnClick")() end
+    if EquipAllButton and EquipAllButton:GetScript("OnClick") then
+        AH_wait(0.1, function() -- Using AH_wait with a small delay
+            if EquipAllButton and EquipAllButton:IsVisible() and EquipAllButton:GetScript("OnClick") then
+                 EquipAllButton:GetScript("OnClick")()
+            end
+        end)
+    end
   end
 end)
 
