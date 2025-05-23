@@ -1,5 +1,5 @@
 AHIgnoreList = AHIgnoreList or {}
-AHSetList = AHSetList or {}
+AHSetList = AHSetList or {} -- Values can be: true (for allowed types) or nil
 AttuneHelperDB = AttuneHelperDB or {}
 
 local synEXTloaded = false
@@ -12,7 +12,7 @@ local itemTypeToUnifiedSlot = {
   INVTYPE_FEET="FeetSlot",INVTYPE_WRIST="WristSlot",INVTYPE_HAND="HandsSlot",
   INVTYPE_FINGER= {"Finger0Slot", "Finger1Slot"},
   INVTYPE_TRINKET= {"Trinket0Slot", "Trinket1Slot"},
-  INVTYPE_WEAPON= {"MainHandSlot", "SecondaryHandSlot"},
+  INVTYPE_WEAPON= {"MainHandSlot", "SecondaryHandSlot"}, -- Generic, could be 1H for MH/OH
   INVTYPE_2HWEAPON="MainHandSlot",
   INVTYPE_WEAPONMAINHAND="MainHandSlot",
   INVTYPE_WEAPONOFFHAND="SecondaryHandSlot",
@@ -45,16 +45,24 @@ local forgeTypeOptionsList = {
   {label = "Lightforged", dbKey = "LIGHTFORGED"}
 }
 
+local cannotEquipOffHandWeaponThisSession = false
+local lastAttemptedSlotForEquip = nil
+local lastAttemptedItemTypeForEquip = nil
+
+
 if AttuneHelperDB["Background Style"]==nil then AttuneHelperDB["Background Style"]="Tooltip" end
 if type(AttuneHelperDB["Background Color"])~="table" or #AttuneHelperDB["Background Color"]<4 then AttuneHelperDB["Background Color"]={0,0,0,0.8} end
 if AttuneHelperDB["Button Color"]==nil then AttuneHelperDB["Button Color"]={1,1,1,1} end
 if AttuneHelperDB["Button Theme"]==nil then AttuneHelperDB["Button Theme"]="Normal" end
 if AttuneHelperDB["Disable Auto-Equip Mythic BoE"] == nil then AttuneHelperDB["Disable Auto-Equip Mythic BoE"] = 1 end
+if AttuneHelperDB["Auto Equip Attunable After Combat"] == nil then AttuneHelperDB["Auto Equip Attunable After Combat"] = 0 end
+if AttuneHelperDB["Equip BoE Bountied Items"] == nil then AttuneHelperDB["Equip BoE Bountied Items"] = 0 end
 
 local BgStyles={
   Tooltip="Interface\\Tooltips\\UI-Tooltip-Background",
   Guild="Interface\\Addons\\AttuneHelper\\assets\\UI-GuildAchievement-AchievementBackground",
-  Atunament="Interface\\Addons\\AttuneHelper\\assets\\atunament-bg"
+  Atunament="Interface\\Addons\\AttuneHelper\\assets\\atunament-bg",
+  ["Always Bee Attunin'"] = "Interface\\Addons\\AttuneHelper\\assets\\always-bee-attunin"
 }
 
 local themePaths = {
@@ -65,8 +73,26 @@ local themePaths = {
   Blue = {
     normal = "Interface\\AddOns\\AttuneHelper\\assets\\nicebutton_blue.blp",
     pushed = "Interface\\AddOns\\AttuneHelper\\assets\\nicebutton_blue_pressed.blp"
+  },
+  Grey = {
+    normal = "Interface\\AddOns\\AttuneHelper\\assets\\nicebutton_gray.blp",
+    pushed = "Interface\\AddOns\\AttuneHelper\\assets\\nicebutton_gray_pressed.blp",
   }
 }
+
+local function tContains(tbl, val)
+    if type(tbl) ~= "table" then return false end
+    for _, v_in_tbl in ipairs(tbl) do
+        if v_in_tbl == val then return true end
+    end
+    return false
+end
+
+local function IsWeaponTypeForOffHandCheck(itemEquipLoc)
+    return itemEquipLoc == "INVTYPE_WEAPON" or
+           itemEquipLoc == "INVTYPE_WEAPONMAINHAND" or
+           itemEquipLoc == "INVTYPE_WEAPONOFFHAND"
+end
 
 local function UpdateBagCache(bagID)
   local old_bag_records = bagSlotCache[bagID]
@@ -104,7 +130,7 @@ local function UpdateBagCache(bagID)
         local unifiedSlotTargetNames = itemTypeToUnifiedSlot[equipSlot_raw]
         if unifiedSlotTargetNames then
           local isAttunable = SynastriaCoreLib.IsAttunable(link)
-          local inSet  = AHSetList[name] and true or false
+          local inSet = (AHSetList[name] == true)
           if isAttunable or inSet then
             local rec = {bag=bagID,slot=slotID,link=link,name=name,equipSlot=equipSlot_raw,isAttunable=isAttunable,inSet=inSet}
             bagSlotCache[bagID][slotID] = rec
@@ -209,11 +235,13 @@ local function LoadAllSettings()
   if type(AttuneHelperDB["Background Color"])~="table" or #AttuneHelperDB["Background Color"]<4 then AttuneHelperDB["Background Color"]={0,0,0,0.8} end
   if AttuneHelperDB["Button Theme"]==nil then AttuneHelperDB["Button Theme"]="Normal" end
   if AttuneHelperDB["Disable Auto-Equip Mythic BoE"] == nil then AttuneHelperDB["Disable Auto-Equip Mythic BoE"] = 1 end
+  if AttuneHelperDB["Auto Equip Attunable After Combat"] == nil then AttuneHelperDB["Auto Equip Attunable After Combat"] = 0 end
+  if AttuneHelperDB["Equip BoE Bountied Items"] == nil then AttuneHelperDB["Equip BoE Bountied Items"] = 0 end
 
   if type(AttuneHelperDB.AllowedForgeTypes) ~= "table" then
      AttuneHelperDB.AllowedForgeTypes = {}
      for keyName, defaultValue in pairs(defaultForgeKeysAndValues) do
-         AttuneHelperDB.AllowedForgeTypes[keyName] = defaultValue
+        AttuneHelperDB.AllowedForgeTypes[keyName] = defaultValue
      end
   end
 
@@ -231,7 +259,9 @@ local function LoadAllSettings()
     UIDropDownMenu_SetText(bgDropdownFrame, AttuneHelperDB["Background Style"])
   end
   if BgStyles[AttuneHelperDB["Background Style"]] then
-    AttuneHelper:SetBackdrop{bgFile=BgStyles[AttuneHelperDB["Background Style"]],edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=(AttuneHelperDB["Background Style"]~="Atunament"),tileSize=(AttuneHelperDB["Background Style"]=="Atunament" and 0 or 16),edgeSize=16,insets={left=4,right=4,top=4,bottom=4}}
+    local currentStyle = AttuneHelperDB["Background Style"]
+    local noTileOrZeroSize = (currentStyle == "Atunament" or currentStyle == "Always Bee Attunin'")
+    AttuneHelper:SetBackdrop{bgFile=BgStyles[currentStyle],edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=(not noTileOrZeroSize),tileSize=(noTileOrZeroSize and 0 or 16),edgeSize=16,insets={left=4,right=4,top=4,bottom=4}}
     AttuneHelper:SetBackdropColor(unpack(AttuneHelperDB["Background Color"]))
   end
   local theme = AttuneHelperDB["Button Theme"] or "Normal"
@@ -254,7 +284,10 @@ local function LoadAllSettings()
   for _, cb in ipairs(general_option_checkboxes) do
     local k = cb:GetName()
     if AttuneHelperDB[k]==nil then
-      if k == "Disable Auto-Equip Mythic BoE" then AttuneHelperDB[k] = 1 else AttuneHelperDB[k] = 0 end
+      if k == "Disable Auto-Equip Mythic BoE" then AttuneHelperDB[k] = 1
+      elseif k == "Auto Equip Attunable After Combat" then AttuneHelperDB[k] = 0
+      elseif k == "Equip BoE Bountied Items" then AttuneHelperDB[k] = 0
+      else AttuneHelperDB[k] = 0 end
     end
     cb:SetChecked(AttuneHelperDB[k]==1)
   end
@@ -287,7 +320,7 @@ local titleF = forgeOptionsPanel:CreateFontString(nil, "ARTWORK", "GameFontNorma
 local descF = forgeOptionsPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall"); descF:SetPoint("TOPLEFT", titleF, "BOTTOMLEFT", 0, -8); descF:SetPoint("RIGHT", -32, 0); descF:SetJustifyH("LEFT"); descF:SetText("Configure which types of forged items are allowed for auto-equipping.")
 
 local slots={"HeadSlot","NeckSlot","ShoulderSlot","BackSlot","ChestSlot","WristSlot","HandsSlot","WaistSlot","LegsSlot","FeetSlot","Finger0Slot","Finger1Slot","Trinket0Slot","Trinket1Slot","MainHandSlot","SecondaryHandSlot","RangedSlot"}
-local general_options_list_for_checkboxes={"Sell Attuned Mythic Gear?","Auto Equip Attunable After Combat","Do Not Sell BoE Items","Limit Selling to 12 Items?", "Disable Auto-Equip Mythic BoE"}
+local general_options_list_for_checkboxes={"Sell Attuned Mythic Gear?","Auto Equip Attunable After Combat","Do Not Sell BoE Items","Limit Selling to 12 Items?", "Disable Auto-Equip Mythic BoE", "Equip BoE Bountied Items"}
 
 local function CreateCheckbox(name,parent,x,y,isGeneralOption,dbKeyOverride)
   local checkboxName = name; if not isGeneralOption and not dbKeyOverride then checkboxName = "AttuneHelperBlacklist_"..name.."Checkbox" elseif dbKeyOverride then checkboxName = "AttuneHelperForgeType_"..dbKeyOverride.."_Checkbox" end
@@ -330,7 +363,16 @@ for _,cb in ipairs(general_option_checkboxes) do cb:SetScript("OnClick",SaveAllS
 
 local bgLabel=generalOptionsPanel:CreateFontString(nil,"ARTWORK","GameFontNormal"); local lastGeneralCheckbox = general_option_checkboxes[#general_option_checkboxes]; if not lastGeneralCheckbox then lastGeneralCheckbox = descG end; bgLabel:SetPoint("TOPLEFT",lastGeneralCheckbox,"BOTTOMLEFT",0,-16);bgLabel:SetText("Background Style:")
 local bgDropdown=CreateFrame("Frame","AttuneHelperBgDropdown",generalOptionsPanel,"UIDropDownMenuTemplate"); bgDropdown:SetPoint("TOPLEFT",bgLabel,"BOTTOMLEFT",-16,0); UIDropDownMenu_SetWidth(bgDropdown,160)
-local function OnBgSelect(self) UIDropDownMenu_SetSelectedValue(bgDropdown,self.value); AttuneHelperDB["Background Style"]=self.value; UIDropDownMenu_SetText(bgDropdown,self.value); AttuneHelper:SetBackdrop({bgFile=BgStyles[self.value],edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=(self.value~="Atunament"),tileSize=(self.value=="Atunament" and 0 or 16),edgeSize=16,insets={left=4,right=4,top=4,bottom=4}}); AttuneHelper:SetBackdropColor(unpack(AttuneHelperDB["Background Color"])); SaveAllSettings() end
+local function OnBgSelect(self)
+    UIDropDownMenu_SetSelectedValue(bgDropdown,self.value)
+    AttuneHelperDB["Background Style"]=self.value
+    UIDropDownMenu_SetText(bgDropdown,self.value)
+    local selectedStyle = self.value
+    local noTileOrZeroSizeForSelected = (selectedStyle == "Atunament" or selectedStyle == "Always Bee Attunin'")
+    AttuneHelper:SetBackdrop({bgFile=BgStyles[selectedStyle],edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=(not noTileOrZeroSizeForSelected),tileSize=(noTileOrZeroSizeForSelected and 0 or 16),edgeSize=16,insets={left=4,right=4,top=4,bottom=4}})
+    AttuneHelper:SetBackdropColor(unpack(AttuneHelperDB["Background Color"]))
+    SaveAllSettings()
+end
 UIDropDownMenu_Initialize(bgDropdown,function(self) for style in pairs(BgStyles) do local info=UIDropDownMenu_CreateInfo(); info.text=style;info.value=style;info.func=OnBgSelect; info.checked=(style==AttuneHelperDB["Background Style"]); UIDropDownMenu_AddButton(info) end end)
 local swatch=CreateFrame("Button","AttuneHelperBgColorSwatch",generalOptionsPanel); swatch:SetSize(16,16);swatch:SetPoint("LEFT",bgDropdown,"RIGHT",20,0); swatch:SetBackdrop{bgFile="Interface\\Tooltips\\UI-Tooltip-Background",edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=4,edgeSize=4,insets={left=1,right=1,top=1,bottom=1}}; swatch:SetBackdropBorderColor(0,0,0,1)
 swatch:SetScript("OnEnter",function(self) GameTooltip:SetOwner(self,"ANCHOR_RIGHT");GameTooltip:SetText("Background Color");GameTooltip:Show() end); swatch:SetScript("OnLeave",GameTooltip_Hide)
@@ -343,9 +385,9 @@ alphaSlider:SetScript("OnValueChanged",function(self,val) AttuneHelperDB["Backgr
 local btLabel=generalOptionsPanel:CreateFontString(nil,"ARTWORK","GameFontNormal"); btLabel:SetPoint("TOPLEFT",alphaSlider,"BOTTOMLEFT",0,-20);btLabel:SetText("Button Theme:")
 local btDropdown=CreateFrame("Frame","AttuneHelperButtonThemeDropdown",generalOptionsPanel,"UIDropDownMenuTemplate"); btDropdown:SetPoint("TOPLEFT",btLabel,"BOTTOMLEFT",-16,0); UIDropDownMenu_SetWidth(btDropdown,160)
 local function OnBtnThemeSelect(self) local v = self.value; UIDropDownMenu_SetSelectedValue(btDropdown, v); UIDropDownMenu_SetText(btDropdown, v); AttuneHelperDB["Button Theme"] = v; ApplyButtonTheme(v); SaveAllSettings() end
-UIDropDownMenu_Initialize(btDropdown,function(self) for _,th in ipairs({"Normal","Blue"}) do local info=UIDropDownMenu_CreateInfo(); info.text=th;info.value=th;info.func=OnBtnThemeSelect; info.checked=(th==AttuneHelperDB["Button Theme"]); UIDropDownMenu_AddButton(info) end end)
+UIDropDownMenu_Initialize(btDropdown,function(self) for _,th in ipairs({"Normal","Blue","Grey"}) do local info=UIDropDownMenu_CreateInfo(); info.text=th;info.value=th;info.func=OnBtnThemeSelect; info.checked=(th==AttuneHelperDB["Button Theme"]); UIDropDownMenu_AddButton(info) end end)
 
-generalOptionsPanel.okay  = SaveAllSettings; generalOptionsPanel.cancel = LoadAllSettings; generalOptionsPanel.refresh= LoadAllSettings
+generalOptionsPanel.okay   = SaveAllSettings; generalOptionsPanel.cancel = LoadAllSettings; generalOptionsPanel.refresh= LoadAllSettings
 blacklistPanel.okay    = SaveAllSettings; blacklistPanel.cancel   = LoadAllSettings; blacklistPanel.refresh   = LoadAllSettings
 forgeOptionsPanel.okay = SaveAllSettings; forgeOptionsPanel.cancel = LoadAllSettings; forgeOptionsPanel.refresh = LoadAllSettings
 
@@ -359,11 +401,21 @@ local function EquipItemInInventory(slotName)
       for slot=1,GetContainerNumSlots(bag) do
         local link=GetContainerItemLink(bag,slot)
         if link then
-          local _,_,_,_,_,_,_,_,equipSlot=GetItemInfoCustom(link)
+          local itemNameForSetCheck, _, _, _, _, _, _, _, equipSlot = GetItemInfoCustom(link)
           if AttuneHelperDB["Disable Two-Handers"] == 1 and equipSlot == "INVTYPE_2HWEAPON" then return end
           local expected=localItemTypeToSlotMapping[equipSlot]
           if expected==slotName or (type(expected)=="table" and tContains(expected,slotName)) then
-            local ok=(phase=="attunable" and SynastriaCoreLib.IsAttunable(link)) or (phase=="set" and AHSetList[GetItemInfoCustom(link)])
+            local ok_set = false
+            if phase == "set" and AHSetList[itemNameForSetCheck] == true then
+                if slotName == "RangedSlot" then
+                    if tContains({"INVTYPE_RANGED", "INVTYPE_THROWN", "INVTYPE_RELIC", "INVTYPE_WAND"}, equipSlot) then
+                        ok_set = true
+                    end
+                elseif slotName ~= "MainHandSlot" and slotName ~= "SecondaryHandSlot" then
+                    ok_set = true
+                end
+            end
+            local ok=(phase=="attunable" and SynastriaCoreLib.IsAttunable(link)) or ok_set
             if ok then local eq=slotNumberMapping[slotName] or GetInventorySlotInfo(slotName); EquipItemByName(link,eq); EquipPendingItem(0); ConfirmBindOnUse(); if phase=="attunable" then HideEquipPopups() end; return end
           end
         end
@@ -380,7 +432,7 @@ EquipAllButton:SetScript("OnClick", function()
   local twoHanderEquippedInMainHandThisCycle = false
 
   local willBindScannerTooltip = nil
-  local function WillBecomeBoundOnEquip(itemLink, itemBag, itemSlot)
+  local function IsBoEAndNotBound(itemLink, itemBag, itemSlot)
     if not itemLink then return false end
     if not willBindScannerTooltip then
       willBindScannerTooltip = CreateFrame("GameTooltip", "AttuneHelperWillBindScannerTooltip", UIParent, "GameTooltipTemplate")
@@ -399,6 +451,7 @@ EquipAllButton:SetScript("OnClick", function()
     end
     if not isBoEType then willBindScannerTooltip:Hide(); return false end
     if itemBag and itemSlot then
+      willBindScannerTooltip:SetOwner(UIParent, "ANCHOR_NONE") -- Re-set owner before setting bag item
       willBindScannerTooltip:SetBagItem(itemBag, itemSlot)
       for i = 1, willBindScannerTooltip:NumLines() do
         local lineTextWidget = _G[willBindScannerTooltip:GetName().."TextLeft"..i]
@@ -413,49 +466,211 @@ EquipAllButton:SetScript("OnClick", function()
     willBindScannerTooltip:Hide(); return true
   end
 
+  local function CanEquipItemPolicyCheck(candidateRec)
+    local itemLink = candidateRec.link
+    local itemBag = candidateRec.bag
+    local itemSlot = candidateRec.slot
+    local itemID = nil
+    if itemLink then itemID = tonumber(string.match(itemLink, "item:(%d+)")) end
+
+    local itemIsCurrentlyBoEAndNotBound = IsBoEAndNotBound(itemLink, itemBag, itemSlot)
+    local isBountied = false
+    if itemID and _G.GetCustomGameData then
+        isBountied = (_G.GetCustomGameData(31, itemID) or 0) > 0
+    end
+
+    if itemIsCurrentlyBoEAndNotBound and isBountied then
+        if AttuneHelperDB["Equip BoE Bountied Items"] == 1 then
+            -- This item is a BoE Bountied item and the user wants to equip them.
+            -- It passes THIS specific check, now it must pass the Forge check below.
+        else
+            -- This item is a BoE Bountied item, but the user has disabled auto-equipping them.
+            return false
+        end
+    else
+        -- Item is NOT a BoE Bountied item (or not BoE at all).
+        -- Apply "Disable Auto-Equip Mythic BoE" check for these non-bountied BoEs or other BoEs.
+        local isConsideredMythic = (itemID and itemID >= MYTHIC_MIN_ITEMID)
+        if AttuneHelperDB["Disable Auto-Equip Mythic BoE"] == 1 and isConsideredMythic and itemIsCurrentlyBoEAndNotBound then
+            return false -- Blocked by Mythic BoE policy
+        end
+    end
+
+    -- Forge Level Check (applies to all items that haven't been filtered out by preceding checks)
+    local forgeLevel = FORGE_LEVEL_MAP.BASE
+    if _G.GetItemLinkTitanforge then forgeLevel = GetItemLinkTitanforge(itemLink) or FORGE_LEVEL_MAP.BASE end
+
+    local allowedTypes = AttuneHelperDB.AllowedForgeTypes or {}
+    if forgeLevel == FORGE_LEVEL_MAP.BASE and allowedTypes.BASE == true then return true
+    elseif forgeLevel == FORGE_LEVEL_MAP.TITANFORGED and allowedTypes.TITANFORGED == true then return true
+    elseif forgeLevel == FORGE_LEVEL_MAP.WARFORGED and allowedTypes.WARFORGED == true then return true
+    elseif forgeLevel == FORGE_LEVEL_MAP.LIGHTFORGED and allowedTypes.LIGHTFORGED == true then return true
+    end
+
+    return false -- Default to not equipping if no forge policy matched
+  end
+
+  local function CanEquip2HInMainHandWithoutInterruptingOHAttunement()
+    local offHandPlayerSlotId = GetInventorySlotInfo("SecondaryHandSlot")
+    local currentOffHandItemLink = GetInventoryItemLink("player", offHandPlayerSlotId)
+    if currentOffHandItemLink then
+        if SynastriaCoreLib.IsAttunableBySomeone(currentOffHandItemLink) and not SynastriaCoreLib.IsAttuned(currentOffHandItemLink) then
+            return false
+        end
+    end
+    return true
+  end
+
   local function checkAndEquip(slotName)
-    if AttuneHelperDB[slotName] == 1 then return end
-    if slotName == "SecondaryHandSlot" and twoHanderEquippedInMainHandThisCycle then return end
-    local mainHandPlayerSlotId = GetInventorySlotInfo("MainHandSlot"); local currentMainHandItemLink = GetInventoryItemLink("player", mainHandPlayerSlotId); local currentMainHandIsTwoHander = false
-    if currentMainHandItemLink then local _, _, _, _, _, _, _, _, currentMainHandEquipSlot_raw = GetItemInfo(currentMainHandItemLink); if currentMainHandEquipSlot_raw == "INVTYPE_2HWEAPON" then currentMainHandIsTwoHander = true end end
-    if currentMainHandIsTwoHander and slotName == "SecondaryHandSlot" then return end
-    local invSlotID = GetInventorySlotInfo(slotName); local curLink  = GetInventoryItemLink("player", invSlotID)
-    if not curLink or SynastriaCoreLib.IsAttuned(curLink) or not SynastriaCoreLib.IsAttunableBySomeone(curLink) then
-      local candidates = equipSlotCache[slotName] or {}
-      for _, rec in ipairs(candidates) do
-        local shouldProcessCandidate = true
-        if currentMainHandIsTwoHander and slotName == "MainHandSlot" then if rec.equipSlot ~= "INVTYPE_2HWEAPON" then shouldProcessCandidate = false end end
-        if shouldProcessCandidate then
-          if rec.inSet or rec.isAttunable then
-            local itemName, itemLink, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount, itemEquipLoc, itemTexture, itemSellPrice, classID, subClassID, originalItemBindType = GetItemInfo(rec.link)
-            local itemID = nil; if rec.link then itemID = tonumber(string.match(rec.link, "item:(%d+):")) end
-            local isConsideredMythic = false; if itemID and itemID >= MYTHIC_MIN_ITEMID then isConsideredMythic = true end
-            local itemWillBecomeBound = WillBecomeBoundOnEquip(rec.link, rec.bag, rec.slot)
-            local disableAutoEquipMythicBoESetting = AttuneHelperDB["Disable Auto-Equip Mythic BoE"]
-            local passesMythicBoECheck = true
-            if disableAutoEquipMythicBoESetting == 1 and isConsideredMythic and itemWillBecomeBound then
-                passesMythicBoECheck = false
+    if AttuneHelperDB[slotName] == 1 then return end -- Slot blacklisted
+    if slotName == "SecondaryHandSlot" and twoHanderEquippedInMainHandThisCycle then return end -- 2H already equipped this cycle
+
+    -- Off-hand weapon equip issue handling
+    if slotName == "SecondaryHandSlot" and cannotEquipOffHandWeaponThisSession then
+        local local_candidates_oh = equipSlotCache[slotName] or {}
+        local can_equip_other_offhand_type = false
+        for _, r_oh_check in ipairs(local_candidates_oh) do
+            if not IsWeaponTypeForOffHandCheck(r_oh_check.equipSlot) then -- only consider non-weapon offhands for this bypass
+                local isAttunableNeedingLeveling = r_oh_check.isAttunable and (not SynastriaCoreLib.IsAttuned(r_oh_check.link))
+                local isAHSetItem = AHSetList[r_oh_check.name] == true
+                if isAttunableNeedingLeveling or isAHSetItem then
+                    if CanEquipItemPolicyCheck(r_oh_check) then
+                        can_equip_other_offhand_type = true
+                        break
+                    end
+                end
+            end
+        end
+        if not can_equip_other_offhand_type then return end
+    end
+
+    local invSlotID = GetInventorySlotInfo(slotName)
+    local eqID = slotNumberMapping[slotName] or invSlotID
+    local equippedItemLink = GetInventoryItemLink("player", invSlotID)
+
+    -- Determine state of the equipped item
+    local isEquippedItemLeveling = false -- Is it an attunable item currently being leveled?
+    local isEquippedItemAHSetAndCorrectlySlotted = false
+
+    if equippedItemLink then
+        -- Check if the equipped item is an "attunable" item that is NOT YET "attuned" (i.e., still needs leveling)
+        if SynastriaCoreLib.IsAttunable(equippedItemLink) and not SynastriaCoreLib.IsAttuned(equippedItemLink) then
+            isEquippedItemLeveling = true
+        end
+
+        -- Check if the equipped item is an AHSet item and correctly slotted
+        local equippedItemName, _, _, _, _, _, _, _, equippedItemEquipLoc = GetItemInfo(equippedItemLink)
+        if equippedItemName and AHSetList[equippedItemName] == true then
+            local unifiedSlotOfEquippedItem = itemTypeToUnifiedSlot[equippedItemEquipLoc]
+            local slotMatch = false
+            if type(unifiedSlotOfEquippedItem) == "string" and unifiedSlotOfEquippedItem == slotName then
+                slotMatch = true
+            elseif type(unifiedSlotOfEquippedItem) == "table" and tContains(unifiedSlotOfEquippedItem, slotName) then
+                slotMatch = true
             end
 
-            if passesMythicBoECheck then
-              local forgeLevel = FORGE_LEVEL_MAP.BASE; if _G.GetItemLinkTitanforge then forgeLevel = GetItemLinkTitanforge(rec.link) or FORGE_LEVEL_MAP.BASE end
-              local allowedTypes = AttuneHelperDB.AllowedForgeTypes or {}; local canEquipBasedOnForgePolicy = false
-              if forgeLevel == FORGE_LEVEL_MAP.BASE and allowedTypes.BASE == true then canEquipBasedOnForgePolicy = true
-              elseif forgeLevel == FORGE_LEVEL_MAP.TITANFORGED and allowedTypes.TITANFORGED == true then canEquipBasedOnForgePolicy = true
-              elseif forgeLevel == FORGE_LEVEL_MAP.WARFORGED and allowedTypes.WARFORGED == true then canEquipBasedOnForgePolicy = true
-              elseif forgeLevel == FORGE_LEVEL_MAP.LIGHTFORGED and allowedTypes.LIGHTFORGED == true then canEquipBasedOnForgePolicy = true
-              end
-              if canEquipBasedOnForgePolicy then
-                local eqID = slotNumberMapping[slotName] or invSlotID; EquipItemByName(rec.name, eqID); EquipPendingItem(0); ConfirmBindOnUse(); HideEquipPopups()
-                if slotName == "MainHandSlot" then local _, _, _, _, _, _, _, _, equippedItemEquipSlot = GetItemInfo(rec.link); if equippedItemEquipSlot == "INVTYPE_2HWEAPON" then twoHanderEquippedInMainHandThisCycle = true end end
-                return
-              end
+            if slotMatch then
+                 -- Specific check for ranged slot types for AHSet items if they are ranged
+                if slotName == "RangedSlot" then
+                    if tContains({"INVTYPE_RANGED", "INVTYPE_THROWN", "INVTYPE_RELIC", "INVTYPE_WAND"}, equippedItemEquipLoc) then
+                         isEquippedItemAHSetAndCorrectlySlotted = true
+                    end
+                -- For AHSet, weapons are not allowed by /AHSet, so only armor/jewelry/non-weapon ranged
+                elseif slotName ~= "MainHandSlot" and slotName ~= "SecondaryHandSlot" then
+                    isEquippedItemAHSetAndCorrectlySlotted = true
+                end
             end
-          end
         end
-      end
     end
+
+    -- PRIORITY 1: If currently equipped item is an "attunable" being leveled, keep it.
+    if isEquippedItemLeveling then
+        return -- Do nothing else for this slot; continue leveling the equipped item.
+    end
+
+    -- PRIORITY 2: Look for an "attunable" item in bags that needs leveling.
+    -- This occurs if:
+    --   a) The slot is empty.
+    --   b) The equipped item is fully attuned (SynastriaCoreLib.IsAttuned is true).
+    --   c) The equipped item is an AHSet item (which is always considered fully attuned/leveled).
+    --   d) The equipped item is some other non-attunable/junk item.
+    local candidates = equipSlotCache[slotName] or {}
+    for _, rec in ipairs(candidates) do
+        -- Candidate must be "attunable" (can be leveled) AND "not yet attuned" (needs leveling)
+        if rec.isAttunable and not SynastriaCoreLib.IsAttuned(rec.link) then
+            if CanEquipItemPolicyCheck(rec) then
+                local proceedWithEquip = true
+                if slotName == "MainHandSlot" and rec.equipSlot == "INVTYPE_2HWEAPON" then
+                    if not CanEquip2HInMainHandWithoutInterruptingOHAttunement() then
+                        proceedWithEquip = false
+                    end
+                end
+                if slotName == "SecondaryHandSlot" and cannotEquipOffHandWeaponThisSession and IsWeaponTypeForOffHandCheck(rec.equipSlot) then
+                    proceedWithEquip = false -- Cannot equip weapon in offhand due to previous error
+                end
+
+                if proceedWithEquip then
+                    lastAttemptedSlotForEquip = slotName; lastAttemptedItemTypeForEquip = rec.equipSlot
+                    EquipItemByName(rec.name, eqID); EquipPendingItem(0); ConfirmBindOnUse(); HideEquipPopups()
+                    if slotName == "MainHandSlot" and rec.equipSlot == "INVTYPE_2HWEAPON" then
+                        twoHanderEquippedInMainHandThisCycle = true
+                    end
+                    return -- Equipped a new attunable for leveling. Done for this slot.
+                end
+            end
+        end
+    end
+
+    -- PRIORITY 3: Equip AHSet item (main/fallback gear).
+    -- This is reached if no item is currently being leveled, and no new attunable item (that needs leveling) was found in bags.
+    if not isEquippedItemAHSetAndCorrectlySlotted then
+        -- Current slot does not have a correctly slotted AHSet item. Look for one in bags.
+        for _, rec_set in ipairs(candidates) do
+            if AHSetList[rec_set.name] == true then -- Candidate is an AHSet item
+                local equipThisSetItem = false
+                -- Check if rec_set is appropriate for slotName (AHSet items are non-weapon, non-mainhand/offhand based on /AHSet command)
+                if slotName == "RangedSlot" then
+                    if tContains({"INVTYPE_RANGED", "INVTYPE_THROWN", "INVTYPE_RELIC", "INVTYPE_WAND"}, rec_set.equipSlot) then
+                        equipThisSetItem = true
+                    end
+                elseif slotName ~= "MainHandSlot" and slotName ~= "SecondaryHandSlot" then
+                     -- For armor, rings, trinkets - ensure it's the correct type for the specific slot
+                    local unifiedSlotForRecSet = itemTypeToUnifiedSlot[rec_set.equipSlot]
+                    if type(unifiedSlotForRecSet) == "string" and unifiedSlotForRecSet == slotName then
+                        equipThisSetItem = true
+                    elseif type(unifiedSlotForRecSet) == "table" and tContains(unifiedSlotForRecSet, slotName) then
+                        equipThisSetItem = true
+                    end
+                end
+
+                if equipThisSetItem and CanEquipItemPolicyCheck(rec_set) then
+                    local proceedWithEquipSetItem = true
+                    -- AHSet items are not weapons, so 2H check on MainHandSlot might be redundant here but kept for safety if /AHSet changes
+                    if (slotName == "MainHandSlot" or slotName == "RangedSlot") and rec_set.equipSlot == "INVTYPE_2HWEAPON" then
+                        if not CanEquip2HInMainHandWithoutInterruptingOHAttunement() then
+                            proceedWithEquipSetItem = false
+                        end
+                    end
+                    if slotName == "SecondaryHandSlot" and cannotEquipOffHandWeaponThisSession and IsWeaponTypeForOffHandCheck(rec_set.equipSlot) then
+                        proceedWithEquipSetItem = false -- Should not happen for AHSet items if they can't be weapons
+                    end
+
+                    if proceedWithEquipSetItem then
+                        lastAttemptedSlotForEquip = slotName; lastAttemptedItemTypeForEquip = rec_set.equipSlot
+                        EquipItemByName(rec_set.name, eqID); EquipPendingItem(0); ConfirmBindOnUse(); HideEquipPopups()
+                        if (slotName == "MainHandSlot" or slotName == "RangedSlot") and rec_set.equipSlot == "INVTYPE_2HWEAPON" then
+                           twoHanderEquippedInMainHandThisCycle = true
+                        end
+                        return -- Equipped AHSet item. Done for this slot.
+                    end
+                end
+            end
+        end
+    end
+    -- If an AHSet item was already equipped and correctly slotted, we do nothing in this pass (isEquippedItemAHSetAndCorrectlySlotted would be true, skipping the loop).
+    -- If no action taken, slot remains as is.
   end
+
   for i, slotName_iter in ipairs(slotsList) do AH_wait(SWAP_THROTTLE * i, checkAndEquip, slotName_iter) end
 end)
 
@@ -464,11 +679,11 @@ SortInventoryButton:SetScript("OnEnter", function(self) GameTooltip:SetOwner(sel
 SortInventoryButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 SortInventoryButton:SetScript("OnClick", function()
   local bagZeroItems, mythicItems, ignoredMythicItems, emptySlots, ignoredLookup = {}, {}, {}, {}, {}
-  for name in pairs(AHIgnoreList) do ignoredLookup[name:lower()] = true end
-  local function IsMythicItem(itemID) if not itemID then return false end; local tt = CreateFrame("GameTooltip","ItemTooltipScanner",nil,"GameTooltipTemplate"); tt:SetOwner(UIParent, "ANCHOR_NONE"); tt:SetHyperlink("item:" .. itemID); for i = 1, tt:NumLines() do local line = _G["ItemTooltipScannerTextLeft" .. i]:GetText(); if line and line:find("Mythic") then tt:Hide(); return true end end; tt:Hide(); return false end
+  for name in pairs(AHIgnoreList) do ignoredLookup[string.lower(name)] = true end
+  local function IsMythicItem(itemID) if not itemID then return false end; local tt = CreateFrame("GameTooltip","ItemTooltipScanner",nil,"GameTooltipTemplate"); tt:SetOwner(UIParent, "ANCHOR_NONE"); tt:SetHyperlink("item:" .. itemID); for i = 1, tt:NumLines() do local line = _G["ItemTooltipScannerTextLeft" .. i]:GetText(); if line and string.find(line, "Mythic") then tt:Hide(); return true end end; tt:Hide(); return false end
   local emptyCount = 0; for bag = 0, 4 do for slot = 1, GetContainerNumSlots(bag) do if not GetContainerItemID(bag, slot) then emptyCount = emptyCount + 1 end end end
   if emptyCount < 16 then print("|cffff0000[Attune Helper]|r: You must have 16 empty inventory slots, make space and try again."); return end
-  for bag = 0, 4 do for slot = 1, GetContainerNumSlots(bag) do local itemID = GetContainerItemID(bag, slot); local itemName = itemID and GetItemInfoCustom(itemID); if itemID then local isMythic = IsMythicItem(itemID); local isIgnored = itemName and ignoredLookup[itemName:lower()]; if bag == 0 then if not isMythic then table.insert(bagZeroItems, {bag = bag, slot = slot}) elseif isIgnored then table.insert(ignoredMythicItems, {bag = bag, slot = slot}) end elseif isMythic and not isIgnored then table.insert(mythicItems, {bag = bag, slot = slot}) end else table.insert(emptySlots, {bag = bag, slot = slot}) end end end
+  for bag = 0, 4 do for slot = 1, GetContainerNumSlots(bag) do local itemID = GetContainerItemID(bag, slot); local itemName = itemID and GetItemInfoCustom(itemID); if itemID then local isMythic = IsMythicItem(itemID); local isIgnored = false; if type(itemName) == "string" and itemName ~= "" then isIgnored = ignoredLookup[string.lower(itemName)] end; if bag == 0 then if not isMythic then table.insert(bagZeroItems, {bag = bag, slot = slot}) elseif isIgnored then table.insert(ignoredMythicItems, {bag = bag, slot = slot}) end elseif isMythic and not isIgnored then table.insert(mythicItems, {bag = bag, slot = slot}) else table.insert(emptySlots, {bag = bag, slot = slot}) end else table.insert(emptySlots, {bag = bag, slot = slot}) end end end
   for _, item in ipairs(ignoredMythicItems) do if #emptySlots > 0 then local tgt = table.remove(emptySlots); PickupContainerItem(item.bag, item.slot); PickupContainerItem(tgt.bag, tgt.slot) end end
   for _, item in ipairs(bagZeroItems) do if #emptySlots > 0 then local tgt = table.remove(emptySlots); PickupContainerItem(item.bag, item.slot); PickupContainerItem(tgt.bag, tgt.slot) end end
   for _, item in ipairs(mythicItems) do if #emptySlots > 0 then local tgt = table.remove(emptySlots, 1); PickupContainerItem(item.bag, item.slot); PickupContainerItem(tgt.bag, tgt.slot) end end
@@ -477,8 +692,97 @@ end)
 VendorAttunedButton = CreateButton("AttuneHelperVendorAttunedButton",AttuneHelper,"Vendor Attuned",SortInventoryButton,"BOTTOM",0,-27,nil,nil,nil,1.3)
 VendorAttunedButton:SetScript("OnClick",function()
   if not MerchantFrame:IsShown() then return end; local limit=AttuneHelperDB["Limit Selling to 12 Items?"]==1; local maxSell=limit and 12 or math.huge; local sold=0
-  local function IsBoE(itemID,bag,slot_idx) if not itemID then return false end; local tt=CreateFrame("GameTooltip","BoETooltipScanner",nil,"GameTooltipTemplate"); tt:SetOwner(UIParent,"ANCHOR_NONE"); tt:SetHyperlink("item:"..itemID); local boe=false; for i=1,tt:NumLines() do local line=_G["BoETooltipScannerTextLeft"..i]:GetText(); if line and line:find("Binds when equipped") then boe=true;break end end; if boe and bag and slot_idx then tt:SetOwner(UIParent, "ANCHOR_NONE"); tt:SetBagItem(bag, slot_idx); for i = 1, tt:NumLines() do local lineText = _G["BoETooltipScannerTextLeft" .. i]; if lineText and lineText:GetText() and lineText:GetText():find("Soulbound") then tt:Hide(); return false end end end; tt:Hide(); return boe end
-  for bag=0,4 do for slot_idx=1,GetContainerNumSlots(bag) do if sold>=maxSell then return end; local link=GetContainerItemLink(bag,slot_idx); local itemID=GetContainerItemID(bag,slot_idx); if link and itemID then local name=GetItemInfoCustom(link); if not (AHIgnoreList[name] or AHSetList[name]) then local attuned=SynastriaCoreLib.IsAttuned(link); local boe_status=IsBoE(itemID,bag,slot_idx); local isMythic=itemID>=MYTHIC_MIN_ITEMID; local dont=AttuneHelperDB["Do Not Sell BoE Items"]==1 and attuned and boe_status; local sellMythic=AttuneHelperDB["Sell Attuned Mythic Gear?"]==1; local should=(isMythic and sellMythic) or not isMythic; if attuned and should and not dont then UseContainerItem(bag,slot_idx); sold=sold+1 end end end end end
+  local boeScannerTooltip = nil
+  local function IsBoE(itemID,bag,slot_idx)
+    if not itemID then return false end
+    if not boeScannerTooltip then
+        boeScannerTooltip = CreateFrame("GameTooltip","AttuneHelperBoEScannerTooltip",UIParent,"GameTooltipTemplate")
+    end
+    boeScannerTooltip:SetOwner(UIParent,"ANCHOR_NONE")
+    boeScannerTooltip:SetHyperlink("item:"..itemID)
+    local boe=false
+    for i=1,boeScannerTooltip:NumLines() do
+        local line=_G[boeScannerTooltip:GetName().."TextLeft"..i]:GetText()
+        if line and string.find(line,"Binds when equipped") then boe=true;break end
+    end
+    if boe and bag and slot_idx then
+        boeScannerTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+        boeScannerTooltip:SetBagItem(bag, slot_idx)
+        for i = 1, boeScannerTooltip:NumLines() do
+            local lineTextWidget = _G[boeScannerTooltip:GetName() .. "TextLeft" .. i]
+            if lineTextWidget then
+                local lineText = lineTextWidget:GetText()
+                if lineText and string.find(lineText,"Soulbound") then
+                    boeScannerTooltip:Hide(); return false
+                end
+            end
+        end
+    end
+    boeScannerTooltip:Hide()
+    return boe
+  end
+
+  for bag=0,4 do
+    for slot_idx=1,GetContainerNumSlots(bag) do
+      if sold>=maxSell then return end
+      local link=GetContainerItemLink(bag,slot_idx)
+      local itemID=GetContainerItemID(bag,slot_idx)
+
+      if link and itemID then
+        local itemName, _, _, _, _, _, _, _, _, _, itemSellPrice = GetItemInfo(link)
+        if itemName then
+            local shouldSkipVendoring = false
+
+            if AHIgnoreList[itemName] then
+                shouldSkipVendoring = true
+            end
+
+            if not shouldSkipVendoring and (itemSellPrice == nil or itemSellPrice == 0) then
+                shouldSkipVendoring = true
+            end
+
+            if not shouldSkipVendoring and GetNumEquipmentSets and GetEquipmentSetInfo and GetEquipmentSetItemIDs then
+                local itemFoundInSet = false
+                for i = 1, GetNumEquipmentSets() do
+                    local setName, setIcon, setID = GetEquipmentSetInfo(i)
+                    if setID then
+                        local itemIDsInSet = {GetEquipmentSetItemIDs(setID)}
+                        for _, idInSet in ipairs(itemIDsInSet) do
+                            if idInSet and idInSet ~= 0 and idInSet == itemID then
+                                itemFoundInSet = true
+                                break
+                            end
+                        end
+                    end
+                    if itemFoundInSet then
+                        break
+                    end
+                end
+                if itemFoundInSet then
+                    shouldSkipVendoring = true
+                end
+            end
+
+            if not shouldSkipVendoring and AHSetList[itemName] == true then
+                shouldSkipVendoring = true
+            end
+
+            if not shouldSkipVendoring then
+              local attuned=SynastriaCoreLib.IsAttuned(link)
+              local boe_status=IsBoE(itemID,bag,slot_idx)
+              local isMythic=itemID>=MYTHIC_MIN_ITEMID
+              local dont=AttuneHelperDB["Do Not Sell BoE Items"]==1 and attuned and boe_status
+              local sellMythic=AttuneHelperDB["Sell Attuned Mythic Gear?"]==1
+              local should=(isMythic and sellMythic) or not isMythic
+              if attuned and should and not dont then
+                UseContainerItem(bag,slot_idx)
+                sold=sold+1
+              end
+            end
+        end
+      end
+    end
+  end
 end)
 
 ApplyButtonTheme(AttuneHelperDB["Button Theme"])
@@ -488,12 +792,69 @@ AH_wait(4,UpdateItemCountText)
 
 SLASH_ATTUNEHELPER1="/ath"; SlashCmdList["ATTUNEHELPER"]=function(msg) local cmd=msg:lower():match("^(%S*)"); if cmd=="reset" then AttuneHelper:ClearAllPoints(); AttuneHelper:SetPoint("CENTER"); print("ATH: UI position reset.") elseif cmd=="show" then AttuneHelper:Show() elseif cmd=="hide" then AttuneHelper:Hide() elseif cmd=="sort" then if SortInventoryButton and SortInventoryButton:GetScript("OnClick") then SortInventoryButton:GetScript("OnClick")() end elseif cmd=="equip" then if EquipAllButton and EquipAllButton:GetScript("OnClick") then EquipAllButton:GetScript("OnClick")() end elseif cmd=="vendor" then if VendorAttunedButton and VendorAttunedButton:GetScript("OnClick") then VendorAttunedButton:GetScript("OnClick")() end else print("/ath show | hide | reset | equip | sort | vendor") end end
 SLASH_AHIGNORE1="/AHIgnore"; SlashCmdList["AHIGNORE"]=function(msg) local n=GetItemInfo(msg); if not n then print("Invalid item link."); return end; AHIgnoreList[n]=not AHIgnoreList[n]; print(n..(AHIgnoreList[n] and " is now ignored." or " will no longer be ignored.")) end
-SLASH_AHSET1="/AHSet"; SlashCmdList["AHSET"]=function(msg) local n=GetItemInfo(msg); if not n then print("Invalid item link."); return end; AHSetList[n]=not AHSetList[n]; print(n..(AHSetList[n] and " is now included in your gear set." or " is no longer included in your gear set.")) end
+
+SLASH_AHSET1="/AHSet"; SlashCmdList["AHSET"]=function(link_part)
+    local itemName, _, _, _, _, itemType, itemSubType, _, itemEquipLoc = GetItemInfo(link_part)
+    if not itemName then print("|cffff0000[AttuneHelper]|r Invalid item link in /AHSet."); return end
+
+    local allowedEquipLocsForSet = {
+        INVTYPE_HEAD=true, INVTYPE_NECK=true, INVTYPE_SHOULDER=true, INVTYPE_CLOAK=true,
+        INVTYPE_CHEST=true, INVTYPE_ROBE=true, INVTYPE_WAIST=true, INVTYPE_LEGS=true,
+        INVTYPE_FEET=true, INVTYPE_WRIST=true, INVTYPE_HAND=true,
+        INVTYPE_FINGER=true, INVTYPE_TRINKET=true,
+        INVTYPE_RANGED=true, INVTYPE_THROWN=true, INVTYPE_RELIC=true, INVTYPE_WAND=true,
+        INVTYPE_RANGEDRIGHT=true
+    }
+
+    if not allowedEquipLocsForSet[itemEquipLoc] then
+        print("|cffff0000[AttuneHelper]|r " .. itemName .. " (" .. itemEquipLoc .. ") cannot be added to AHSet. Only armor, jewelry, and ranged slot items are allowed."); return
+    end
+
+    if AHSetList[itemName] == true then
+        AHSetList[itemName] = nil
+        print("|cffffd200[AttuneHelper]|r " .. itemName .. " removed from set items.")
+    else
+        AHSetList[itemName] = true
+        print("|cffffd200[AttuneHelper]|r " .. itemName .. " added to set items.")
+    end
+end
+
 SLASH_ATH2H1 = "/ah2h"; SlashCmdList["ATH2H"] = function(msg) local f = AttuneHelperDB; f["Disable Two-Handers"] = 1 - (f["Disable Two-Handers"] or 0); print("|cffffd200[AttuneHelper]|r Two-handers equipping " .. (f["Disable Two-Handers"] == 1 and "disabled" or "enabled")) end
+
+SLASH_AHTOGGLE1 = "/ahtoggle"; SlashCmdList["AHTOGGLE"] = function()
+    if AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 then
+        AttuneHelperDB["Auto Equip Attunable After Combat"] = 0
+        print("|cffffd200[AttuneHelper]|r Auto-Equip Attunables After Combat: |cffff0000Disabled|r.")
+    else
+        AttuneHelperDB["Auto Equip Attunable After Combat"] = 1
+        print("|cffffd200[AttuneHelper]|r Auto-Equip Attunables After Combat: |cff00ff00Enabled|r.")
+    end
+    for _, cb in ipairs(general_option_checkboxes) do
+        if cb:GetName() == "Auto Equip Attunable After Combat" then
+            cb:SetChecked(AttuneHelperDB["Auto Equip Attunable After Combat"] == 1)
+            break
+        end
+    end
+end
+
+SLASH_AHSETLIST1 = "/ahsetlist"; SlashCmdList["AHSETLIST"] = function()
+    local count = 0
+    print("|cffffd200[AttuneHelper]|r Current AHSetList Items:")
+    for itemName, isSet in pairs(AHSetList) do
+        if isSet == true then -- Only list items explicitly set to true (general set items)
+            print("- " .. itemName)
+            count = count + 1
+        end
+    end
+    if count == 0 then
+        print("|cffffd200[AttuneHelper]|r No items currently in AHSetList.")
+    end
+end
+
 local frame=CreateFrame("Frame"); frame:RegisterEvent("MERCHANT_SHOW"); frame:RegisterEvent("MERCHANT_CLOSED"); frame:RegisterEvent("MERCHANT_UPDATE")
 frame:SetScript("OnEvent",function(self,event_name_merchant) if event_name_merchant=="MERCHANT_SHOW" or event_name_merchant=="MERCHANT_UPDATE" then for i=1,GetNumBuybackItems() do local link=GetBuybackItemLink(i); if link then local name=GetItemInfoCustom(link); if AHIgnoreList[name] or AHSetList[name] then BuybackItem(i); print("|cffff0000[Attune Helper]|r Bought back your ignored/set item: " .. name); return end end end end end)
 
-AttuneHelper:RegisterEvent("ADDON_LOADED"); AttuneHelper:RegisterEvent("PLAYER_REGEN_DISABLED"); AttuneHelper:RegisterEvent("PLAYER_REGEN_ENABLED"); AttuneHelper:RegisterEvent("PLAYER_LOGIN"); AttuneHelper:RegisterEvent("BAG_UPDATE"); AttuneHelper:RegisterEvent("CHAT_MSG_SYSTEM")
+AttuneHelper:RegisterEvent("ADDON_LOADED"); AttuneHelper:RegisterEvent("PLAYER_REGEN_DISABLED"); AttuneHelper:RegisterEvent("PLAYER_REGEN_ENABLED"); AttuneHelper:RegisterEvent("PLAYER_LOGIN"); AttuneHelper:RegisterEvent("BAG_UPDATE"); AttuneHelper:RegisterEvent("CHAT_MSG_SYSTEM"); AttuneHelper:RegisterEvent("UI_ERROR_MESSAGE")
 AttuneHelper:SetScript("OnEvent",function(self,event_name_attune, arg1)
   if event_name_attune == "ADDON_LOADED" and arg1 == "AttuneHelper" then
     if AttuneHelperDB["Background Style"] == nil then AttuneHelperDB["Background Style"] = "Tooltip" end
@@ -501,6 +862,9 @@ AttuneHelper:SetScript("OnEvent",function(self,event_name_attune, arg1)
     if AttuneHelperDB["Button Theme"] == nil then AttuneHelperDB["Button Theme"] = "Normal" end
     if AttuneHelperDB["Disable Two-Handers"] == nil then AttuneHelperDB["Disable Two-Handers"] = 0 end
     if AttuneHelperDB["Disable Auto-Equip Mythic BoE"] == nil then AttuneHelperDB["Disable Auto-Equip Mythic BoE"] = 1 end
+    if AttuneHelperDB["Auto Equip Attunable After Combat"] == nil then AttuneHelperDB["Auto Equip Attunable After Combat"] = 0 end
+    if AttuneHelperDB["Equip BoE Bountied Items"] == nil then AttuneHelperDB["Equip BoE Bountied Items"] = 0 end
+
 
     if type(AttuneHelperDB.AllowedForgeTypes) ~= "table" then
         AttuneHelperDB.AllowedForgeTypes = {}
@@ -522,6 +886,14 @@ AttuneHelper:SetScript("OnEvent",function(self,event_name_attune, arg1)
   elseif event_name_attune=="CHAT_MSG_SYSTEM" and AttuneHelperDB["Auto Equip Attunable After Combat"]==1 then
   elseif event_name_attune == "PLAYER_REGEN_ENABLED" and AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 then
    if EquipAllButton and EquipAllButton:GetScript("OnClick") then EquipAllButton:GetScript("OnClick")() end
+  elseif event_name_attune == "UI_ERROR_MESSAGE" then
+    if arg1 == ERR_ITEM_CANNOT_BE_EQUIPPED then
+        if lastAttemptedSlotForEquip == "SecondaryHandSlot" and IsWeaponTypeForOffHandCheck(lastAttemptedItemTypeForEquip) then
+            cannotEquipOffHandWeaponThisSession = true
+        end
+    end
+    lastAttemptedSlotForEquip = nil
+    lastAttemptedItemTypeForEquip = nil
   end
 end)
 
