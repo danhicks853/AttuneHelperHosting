@@ -14,12 +14,7 @@ AttuneHelper is a World of Warcraft addon designed to assist players with managi
 * Customizable UI elements.
 
 ## Slash Commands
-
 All commands are case-insensitive.
-
-### Main Control: `/ath` or `/attunehelper`
-
-This is the primary command for interacting with the AttuneHelper UI and core functions.
 ### Item Lists Management
 
 * `/AHIgnore <itemlink>`
