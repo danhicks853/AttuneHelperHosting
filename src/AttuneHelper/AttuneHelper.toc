@@ -2,8 +2,9 @@
 ## Title: AttuneHelper
 ## Notes: Automatically Swaps Gear To Streamline Attunement
 ## Author: Multiple People
-## Version: 1.1.4-Release
-## SavedVariables: AttuneHelperDB, AHIgnoreList, AHSetList
+## Version: 1.2.0-Release
+## SavedVariables: AttuneHelperDB, AHIgnoreList
+## SavedVariablesPerCharacter: AHSetList
 ## OptionalDeps: Ace3, LinkWrangler, SynastriaCoreLib
 ## X-Category: Imevul
 
