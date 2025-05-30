@@ -374,16 +374,106 @@ local AttuneHelper=CreateFrame("Frame","AttuneHelperFrame",UIParent) AttuneHelpe
 local AttuneHelper_UpdateDisplayMode
 local function SaveAllSettings() if not InterfaceOptionsFrame or not InterfaceOptionsFrame:IsShown() then return end for _,cb in ipairs(blacklist_checkboxes) do if cb and cb:IsShown() then AttuneHelperDB[cb:GetName():gsub("AttuneHelperBlacklist_",""):gsub("Checkbox","")]=cb:GetChecked() and 1 or 0 end end for _,cb in ipairs(general_option_checkboxes) do if cb and cb:IsShown() then AttuneHelperDB[cb.dbKey or cb:GetName()]=cb:GetChecked() and 1 or 0 end end if type(AttuneHelperDB.AllowedForgeTypes)~="table" then AttuneHelperDB.AllowedForgeTypes={} end for _,cb in ipairs(forge_type_checkboxes) do if cb and cb:IsShown() and cb.dbKey then if cb:GetChecked() then AttuneHelperDB.AllowedForgeTypes[cb.dbKey]=true else AttuneHelperDB.AllowedForgeTypes[cb.dbKey]=nil end end end
 end
-local function LoadAllSettings() InitializeDefaultSettings() if AttuneHelperDB.FramePosition then AttuneHelper:SetPoint(unpack(AttuneHelperDB.FramePosition)) end if AttuneHelperMiniFrame and AttuneHelperDB.MiniFramePosition then AttuneHelperMiniFrame:SetPoint(unpack(AttuneHelperDB.MiniFramePosition)) end if type(AttuneHelperDB.AllowedForgeTypes)~="table" then AttuneHelperDB.AllowedForgeTypes={} for k,v in pairs(defaultForgeKeysAndValues) do AttuneHelperDB.AllowedForgeTypes[k]=v end end for _,cbW in ipairs(forge_type_checkboxes) do if cbW and cbW.dbKey then cbW:SetChecked(AttuneHelperDB.AllowedForgeTypes[cbW.dbKey]==true) end end
-    local ddBgStyle=_G["AttuneHelperBgDropdown"] if ddBgStyle then UIDropDownMenu_SetSelectedValue(ddBgStyle, AttuneHelperDB["Background Style"]) UIDropDownMenu_SetText(ddBgStyle, AttuneHelperDB["Background Style"]) end
-    if BgStyles[AttuneHelperDB["Background Style"]] then local cs,nt=AttuneHelperDB["Background Style"],(cs=="Atunament" or cs=="Always Bee Attunin'") AttuneHelper:SetBackdrop{bgFile=BgStyles[cs],edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=(not nt),tileSize=(nt and 0 or 16),edgeSize=16,insets={left=4,right=4,top=4,bottom=4}} AttuneHelper:SetBackdropColor(unpack(AttuneHelperDB["Background Color"])) end
-    if AttuneHelperMiniFrame then AttuneHelperMiniFrame:SetBackdropColor(AttuneHelperDB["Background Color"][1],AttuneHelperDB["Background Color"][2],AttuneHelperDB["Background Color"][3],AttuneHelperDB["Background Color"][4]) end
-    local th=AttuneHelperDB["Button Theme"] or "Normal" local ddBtnTheme=_G["AttuneHelperButtonThemeDropdown"] if ddBtnTheme then UIDropDownMenu_SetSelectedValue(ddBtnTheme,th) UIDropDownMenu_SetText(ddBtnTheme,th) end ApplyButtonTheme(th)
-    local bgcT=AttuneHelperDB["Background Color"] local csf=_G["AttuneHelperBgColorSwatch"] if csf then csf:SetBackdropColor(bgcT[1],bgcT[2],bgcT[3],1) end
-    local asf=_G["AttuneHelperAlphaSlider"] if asf then asf:SetValue(bgcT[4]) end
-    for _,cb in ipairs(blacklist_checkboxes) do cb:SetChecked(AttuneHelperDB[cb:GetName():gsub("AttuneHelperBlacklist_",""):gsub("Checkbox","")]==1) end
-    for _,cb in ipairs(general_option_checkboxes) do cb:SetChecked(AttuneHelperDB[cb.dbKey or cb:GetName()]==1) end 
-    if AttuneHelper_UpdateDisplayMode then AttuneHelper_UpdateDisplayMode() end
+
+local function LoadAllSettings() 
+    InitializeDefaultSettings() 
+    
+    if AttuneHelperDB.FramePosition then 
+        AttuneHelper:SetPoint(unpack(AttuneHelperDB.FramePosition)) 
+    end 
+    
+    -- Fix for MiniFrame positioning with better validation
+    if AttuneHelperMiniFrame and AttuneHelperDB.MiniFramePosition then 
+        local pos = AttuneHelperDB.MiniFramePosition
+        -- Check if position data is valid and parent frame exists
+        if pos and #pos >= 5 and pos[1] and pos[3] and pos[4] ~= nil and pos[5] ~= nil then
+            -- Validate that pos[2] is a valid frame reference
+            if pos[2] == UIParent or (type(pos[2]) == "table" and pos[2].GetObjectType) then
+                AttuneHelperMiniFrame:SetPoint(unpack(pos))
+            else
+                -- Reset to default if parent frame is invalid
+                AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+                AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+            end
+        else
+            -- Reset to default if position data is invalid
+            AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+            AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+        end
+    end 
+    
+    -- Rest of the function remains the same...
+    if type(AttuneHelperDB.AllowedForgeTypes)~="table" then 
+        AttuneHelperDB.AllowedForgeTypes={} 
+        for k,v in pairs(defaultForgeKeysAndValues) do 
+            AttuneHelperDB.AllowedForgeTypes[k]=v 
+        end 
+    end 
+    
+    for _,cbW in ipairs(forge_type_checkboxes) do 
+        if cbW and cbW.dbKey then 
+            cbW:SetChecked(AttuneHelperDB.AllowedForgeTypes[cbW.dbKey]==true) 
+        end 
+    end
+    
+    local ddBgStyle=_G["AttuneHelperBgDropdown"] 
+    if ddBgStyle then 
+        UIDropDownMenu_SetSelectedValue(ddBgStyle, AttuneHelperDB["Background Style"]) 
+        UIDropDownMenu_SetText(ddBgStyle, AttuneHelperDB["Background Style"]) 
+    end
+    
+    if BgStyles[AttuneHelperDB["Background Style"]] then 
+        local cs,nt=AttuneHelperDB["Background Style"],(cs=="Atunament" or cs=="Always Bee Attunin'") 
+        AttuneHelper:SetBackdrop{
+            bgFile=BgStyles[cs],
+            edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",
+            tile=(not nt),
+            tileSize=(nt and 0 or 16),
+            edgeSize=16,
+            insets={left=4,right=4,top=4,bottom=4}
+        } 
+        AttuneHelper:SetBackdropColor(unpack(AttuneHelperDB["Background Color"])) 
+    end
+    
+    if AttuneHelperMiniFrame then 
+        AttuneHelperMiniFrame:SetBackdropColor(
+            AttuneHelperDB["Background Color"][1],
+            AttuneHelperDB["Background Color"][2],
+            AttuneHelperDB["Background Color"][3],
+            AttuneHelperDB["Background Color"][4]
+        ) 
+    end
+    
+    local th=AttuneHelperDB["Button Theme"] or "Normal" 
+    local ddBtnTheme=_G["AttuneHelperButtonThemeDropdown"] 
+    if ddBtnTheme then 
+        UIDropDownMenu_SetSelectedValue(ddBtnTheme,th) 
+        UIDropDownMenu_SetText(ddBtnTheme,th) 
+    end 
+    ApplyButtonTheme(th)
+    
+    local bgcT=AttuneHelperDB["Background Color"] 
+    local csf=_G["AttuneHelperBgColorSwatch"] 
+    if csf then 
+        csf:SetBackdropColor(bgcT[1],bgcT[2],bgcT[3],1) 
+    end
+    
+    local asf=_G["AttuneHelperAlphaSlider"] 
+    if asf then 
+        asf:SetValue(bgcT[4]) 
+    end
+    
+    for _,cb in ipairs(blacklist_checkboxes) do 
+        cb:SetChecked(AttuneHelperDB[cb:GetName():gsub("AttuneHelperBlacklist_",""):gsub("Checkbox","")]==1) 
+    end
+    
+    for _,cb in ipairs(general_option_checkboxes) do 
+        cb:SetChecked(AttuneHelperDB[cb.dbKey or cb:GetName()]==1) 
+    end 
+    
+    if AttuneHelper_UpdateDisplayMode then 
+        AttuneHelper_UpdateDisplayMode() 
+    end
 end
 local function CreateButton(n,p,t,a,ap,x,y,w,h,c,s) s=s or 1 local x1,y1,x2,y2=65,176,457,290 local rw,rh=x2-x1,y2-y1 local u1,u2,v1,v2=x1/512,x2/512,y1/512,y2/512 if w and not h then h=w*rh/rw elseif h and not w then w=h*rw/rh else h=24 w=h*rw/rh*1.5 end local b=CreateFrame("Button",n,p,"UIPanelButtonTemplate") b:SetSize(w,h) b:SetScale(s) b:SetPoint(ap,a,ap,x,y) b:SetText(t) local thA=AttuneHelperDB["Button Theme"] or "Normal" if themePaths[thA] then b:SetNormalTexture(themePaths[thA].normal) b:SetPushedTexture(themePaths[thA].pushed) b:SetHighlightTexture(themePaths[thA].pushed,"ADD") for _,st in ipairs({"Normal","Pushed","Highlight"}) do local tx=b["Get"..st.."Texture"](b) if tx then tx:SetTexCoord(u1,u2,v1,v2) end local cl=c and c[st:lower()] if cl and tx then tx:SetVertexColor(cl[1],cl[2],cl[3],cl[4] or 1)end end end local fo=b:GetFontString() if fo then fo:SetFont("Fonts\\FRIZQT__.TTF",10,"OUTLINE") end b:SetBackdropColor(0,0,0,0.5) b:SetBackdropBorderColor(1,1,1,1) return b end
 
@@ -1160,7 +1250,80 @@ SLASH_AHTOGGLE1="/ahtoggle" SlashCmdList["AHTOGGLE"]=function()AttuneHelperDB["A
 SLASH_AHSETLIST1="/ahsetlist" SlashCmdList["AHSETLIST"]=function()local c=0 print("|cffffd200[AH]|r AHSetList Items:") for n,s_val in pairs(AHSetList)do if s_val then print("- "..n .. " (Slot: " .. tostring(s_val) .. ")") c=c+1 end end if c==0 then print("|cffffd200[AH]|r No items in AHSetList.")end end
 local merchF=CreateFrame("Frame") merchF:RegisterEvent("MERCHANT_SHOW") merchF:RegisterEvent("MERCHANT_UPDATE") merchF:SetScript("OnEvent",function(_,e)if e=="MERCHANT_SHOW"or e=="MERCHANT_UPDATE"then for i=1,GetNumBuybackItems()do local l=GetBuybackItemLink(i) if l then local n=GetItemInfo(l) if AHIgnoreList[n]or AHSetList[n]then BuybackItem(i) print("|cffff0000[AH]|r Bought back: "..n) return end end end end end)
 AttuneHelper:RegisterEvent("ADDON_LOADED") AttuneHelper:RegisterEvent("PLAYER_REGEN_DISABLED") AttuneHelper:RegisterEvent("PLAYER_REGEN_ENABLED") AttuneHelper:RegisterEvent("PLAYER_LOGIN") AttuneHelper:RegisterEvent("BAG_UPDATE") AttuneHelper:RegisterEvent("UI_ERROR_MESSAGE")
-AttuneHelper:SetScript("OnEvent",function(s,e,a1)if e=="ADDON_LOADED"and a1=="AttuneHelper"then InitializeDefaultSettings() if _G["SCK"]and type(_G["SCK"].loop)=="function"then isSCKLoaded=true print_debug_general("SCK detected.")end LoadAllSettings() s:UnregisterEvent("ADDON_LOADED")end if e=="PLAYER_LOGIN"then s:UnregisterEvent("PLAYER_LOGIN") AH_wait(1,function()if AttuneHelperMiniFrame and AttuneHelperDB.MiniFramePosition then AttuneHelperMiniFrame:SetPoint(unpack(AttuneHelperDB.MiniFramePosition))end if AttuneHelperDB.FramePosition then AttuneHelper:SetPoint(unpack(AttuneHelperDB.FramePosition))end LoadAllSettings()end) AH_wait(3,function()synEXTloaded=true for b=0,4 do UpdateBagCache(b)end UpdateItemCountText()end)elseif e=="BAG_UPDATE"then if not synEXTloaded then return end UpdateBagCache(a1) UpdateItemCountText() local nT=GetTime() if nT-(deltaTime or 0)<CHAT_MSG_SYSTEM_THROTTLE then return end deltaTime=nT if AttuneHelperDB["Auto Equip Attunable After Combat"]==1 and not InCombatLockdown()then local fn=EquipAllButton:GetScript("OnClick") if fn then AH_wait(0.2,fn)end end elseif e=="PLAYER_REGEN_ENABLED"and AttuneHelperDB["Auto Equip Attunable After Combat"]==1 then local fn=EquipAllButton:GetScript("OnClick") if fn then AH_wait(0.2,fn)end elseif e=="UI_ERROR_MESSAGE"and a1==ERR_ITEM_CANNOT_BE_EQUIPPED then if lastAttemptedSlotForEquip=="SecondaryHandSlot"and IsWeaponTypeForOffHandCheck(lastAttemptedItemTypeForEquip)then cannotEquipOffHandWeaponThisSession=true end lastAttemptedSlotForEquip=nil lastAttemptedItemTypeForEquip=nil end end)
+AttuneHelper:SetScript("OnEvent", function(s, e, a1)
+    if e == "ADDON_LOADED" and a1 == "AttuneHelper" then
+        InitializeDefaultSettings()
+        if _G["SCK"] and type(_G["SCK"].loop) == "function" then
+            isSCKLoaded = true
+            print_debug_general("SCK detected.")
+        end
+        LoadAllSettings()
+        s:UnregisterEvent("ADDON_LOADED")
+    end
+    
+    if e == "PLAYER_LOGIN" then
+        s:UnregisterEvent("PLAYER_LOGIN")
+        AH_wait(1, function()
+            if AttuneHelperMiniFrame and AttuneHelperDB.MiniFramePosition then
+                local pos = AttuneHelperDB.MiniFramePosition
+                -- Check if position data is valid and parent frame exists
+                if pos and #pos >= 5 and pos[1] and pos[3] and pos[4] ~= nil and pos[5] ~= nil then
+                    -- Validate that pos[2] is a valid frame reference
+                    if pos[2] == UIParent or (type(pos[2]) == "table" and pos[2].GetObjectType) then
+                        AttuneHelperMiniFrame:SetPoint(unpack(pos))
+                    else
+                        -- Reset to default if parent frame is invalid
+                        AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+                        AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+                    end
+                else
+                    -- Reset to default if position data is invalid
+                    AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+                    AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+                end
+            end
+            if AttuneHelperDB.FramePosition then
+                AttuneHelper:SetPoint(unpack(AttuneHelperDB.FramePosition))
+            end
+            LoadAllSettings()
+        end)
+        AH_wait(3, function()
+            synEXTloaded = true
+            for b = 0, 4 do
+                UpdateBagCache(b)
+            end
+            UpdateItemCountText()
+        end)
+    elseif e == "BAG_UPDATE" then
+        if not synEXTloaded then
+            return
+        end
+        UpdateBagCache(a1)
+        UpdateItemCountText()
+        local nT = GetTime()
+        if nT - (deltaTime or 0) < CHAT_MSG_SYSTEM_THROTTLE then
+            return
+        end
+        deltaTime = nT
+        if AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 and not InCombatLockdown() then
+            local fn = EquipAllButton:GetScript("OnClick")
+            if fn then
+                AH_wait(0.2, fn)
+            end
+        end
+    elseif e == "PLAYER_REGEN_ENABLED" and AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 then
+        local fn = EquipAllButton:GetScript("OnClick")
+        if fn then
+            AH_wait(0.2, fn)
+        end
+    elseif e == "UI_ERROR_MESSAGE" and a1 == ERR_ITEM_CANNOT_BE_EQUIPPED then
+        if lastAttemptedSlotForEquip == "SecondaryHandSlot" and IsWeaponTypeForOffHandCheck(lastAttemptedItemTypeForEquip) then
+            cannotEquipOffHandWeaponThisSession = true
+        end
+        lastAttemptedSlotForEquip = nil
+        lastAttemptedItemTypeForEquip = nil
+    end
+end)
 SLASH_AHIGNORELIST1="/ahignorelist" SlashCmdList["AHIGNORELIST"]=function()local c=0 print("|cffffd200[AH]|r Ignored:") for n,enable_flag in pairs(AHIgnoreList)do if enable_flag then print("- "..n) c=c+1 end end if c==0 then print("|cffffd200[AH]|r No ignored items.")end end
 SLASH_AHBL1="/ahbl" SlashCmdList["AHBL"]=function(m)local k=m:lower():match("^(%S*)") local sV=slotAliases[k] if not sV then print("|cffff0000[AH]|r Usage: /ahbl <slot_keyword> [...]") return end AttuneHelperDB[sV]=1-(AttuneHelperDB[sV]or 0) print(string.format("|cffffd200[AH]|r %s %s.",sV,(AttuneHelperDB[sV]==1 and"blacklisted"or"unblacklisted"))) local cb=_G["AttuneHelperBlacklist_"..sV.."Checkbox"] if cb and cb.SetChecked then cb:SetChecked(AttuneHelperDB[sV]==1)end end
 SLASH_AHBLL1="/ahbll" SlashCmdList["AHBLL"]=function()local f=false print("|cffffd200[AH]|r Blacklisted Slots:") for _,sN in ipairs(slots)do if AttuneHelperDB[sN]==1 then print("- "..sN) f=true end end if not f then print("|cffffd200[AH]|r No blacklisted slots.")end end
