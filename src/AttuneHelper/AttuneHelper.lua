@@ -3,7 +3,7 @@ AHSetList = AHSetList or {} -- Now stores itemName = "TargetSlotName"
 AttuneHelperDB = AttuneHelperDB or {}
 
 -- ****** DEBUGGING TOGGLE ******
-local GENERAL_DEBUG_MODE = false -- Set to true for original broad debug messages
+local GENERAL_DEBUG_MODE = true -- Set to true for original broad debug messages
 local AHSET_DEBUG_MODE = false   -- Set to true for focused AHSet debugging
 local function print_debug_general(msg)
     if GENERAL_DEBUG_MODE then
@@ -140,6 +140,7 @@ local function ItemIsActivelyLeveling(itemId, itemLink)
         return false 
     end
     
+    -- CRITICAL: Use the itemLink to check THIS SPECIFIC VARIANT's progress
     local progress = GetItemLinkAttuneProgress(itemLink)
 
     if type(progress) ~= "number" then
@@ -172,6 +173,7 @@ local function ItemQualifiesForBagEquip(itemId, itemLink, isEquipNewAffixesOnlyE
         return false 
     end
 
+    -- CRITICAL: Use the itemLink to check THIS SPECIFIC VARIANT's progress
     local progress
     if _G.GetItemLinkAttuneProgress then 
         progress = GetItemLinkAttuneProgress(itemLink) 
@@ -187,10 +189,13 @@ local function ItemQualifiesForBagEquip(itemId, itemLink, isEquipNewAffixesOnlyE
     print_debug_general("ItemQualifiesForBagEquip check for itemLink ".. itemLink .. ": Progress="..progress..", EquipNewAffixesOnly="..tostring(isEquipNewAffixesOnlyEnabled))
 
     if progress >= 100 then
-        print_debug_general("  Variant already 100% attuned. Does not qualify.")
+        print_debug_general("  This specific variant already 100% attuned. Does not qualify.")
         return false 
     end
 
+    -- Get forge level of this specific variant
+    local currentForgeLevel = GetForgeLevelFromLink(itemLink)
+    
     if isEquipNewAffixesOnlyEnabled then 
         local hasAnyVariantBeenAttuned = true 
         if _G.HasAttunedAnyVariantOfItem then
@@ -203,14 +208,50 @@ local function ItemQualifiesForBagEquip(itemId, itemLink, isEquipNewAffixesOnlyE
             print_debug_general("  Strict Mode ('EquipNewAffixesOnly' ON): Qualifies because NO variant of base item ID " .. itemId .. " has been attuned yet (and current variant progress < 100%).")
             return true
         else
-            print_debug_general("  Strict Mode ('EquipNewAffixesOnly' ON): Does NOT qualify because some variant of base item ID " .. itemId .. " has already been attuned.")
-            return false
+            -- FORGE PRIORITY OVERRIDE: Even in strict mode, allow higher forge levels
+            if currentForgeLevel > FORGE_LEVEL_MAP.BASE then
+                print_debug_general("  Strict Mode ('EquipNewAffixesOnly' ON): FORGE OVERRIDE - Qualifies because this is a higher forge level (" .. currentForgeLevel .. ") even though some variant has been attuned.")
+                return true
+            else
+                print_debug_general("  Strict Mode ('EquipNewAffixesOnly' ON): Does NOT qualify because some variant of base item ID " .. itemId .. " has already been attuned and this is only forge level " .. currentForgeLevel .. ".")
+                return false
+            end
         end
     else 
-        print_debug_general("  Lenient Mode ('EquipNewAffixesOnly' OFF): Qualifies because current variant progress < 100%.")
+        print_debug_general("  Lenient Mode ('EquipNewAffixesOnly' OFF): Qualifies because this specific variant progress < 100%.")
         return true
     end
 end
+
+-- Helper: Compare two items to determine which should be equipped first
+-- Returns true if item1 should be prioritized over item2
+local function ShouldPrioritizeItem(item1Link, item2Link)
+    if not item1Link or not item2Link then return false end
+    
+    -- Get forge levels
+    local forge1 = GetForgeLevelFromLink(item1Link)
+    local forge2 = GetForgeLevelFromLink(item2Link)
+    
+    -- Higher forge level wins
+    if forge1 ~= forge2 then
+        return forge1 > forge2
+    end
+    
+    -- If same forge level, check progress (lower progress = more room to grow)
+    local progress1 = 0
+    local progress2 = 0
+    
+    if _G.GetItemLinkAttuneProgress then
+        progress1 = GetItemLinkAttuneProgress(item1Link) or 0
+        progress2 = GetItemLinkAttuneProgress(item2Link) or 0
+        if type(progress1) ~= "number" then progress1 = 0 end
+        if type(progress2) ~= "number" then progress2 = 0 end
+    end
+    
+    -- Lower progress wins (more room to attune)
+    return progress1 < progress2
+end
+
 
 local function UpdateItemCountText()
   local c = 0
@@ -730,24 +771,24 @@ EquipAllButton:SetScript("OnClick", function()
     local function checkAndEquip(slotName)
         print_debug_general("--- Checking slot: " .. slotName .. " ---")
         if AttuneHelperDB[slotName] == 1 then print_debug_general("Slot "..slotName.." is blacklisted.") return end
-
+    
         local currentMHLink_OverallCheck = GetInventoryItemLink("player", GetInventorySlotInfo("MainHandSlot"))
         local currentMHIs2H = false
         if currentMHLink_OverallCheck then
             local _,_,_,_,_,_,_,_,currentMHEquipLoc = GetItemInfo(currentMHLink_OverallCheck)
             if currentMHEquipLoc == "INVTYPE_2HWEAPON" then currentMHIs2H = true print_debug_general("Current MH is 2H: " .. currentMHLink_OverallCheck) end
         end
-
+    
         if slotName == "SecondaryHandSlot" then
             if currentMHIs2H then print_debug_general("Cannot equip OH for "..slotName.." because current MH is 2H.") return end
             if twoHanderEquippedInMainHandThisEquipCycle then print_debug_general("Cannot equip OH for "..slotName.." because a 2H was equipped this cycle.") return end
         end
-
+    
         local invSlotID = GetInventorySlotInfo(slotName) local eqID = slotNumberMapping[slotName] or invSlotID
         local equippedItemLink = GetInventoryItemLink("player", invSlotID)
         local isEquippedItemActivelyLevelingFlag = false 
         local equippedItemName, equippedItemEquipLoc
-
+    
         if equippedItemLink then
             print_debug_general(slotName .. " has equipped: " .. equippedItemLink)
             local equippedItemId = GetItemIDFromLink(equippedItemLink)
@@ -760,7 +801,7 @@ EquipAllButton:SetScript("OnClick", function()
         else 
             print_debug_general(slotName .. " is empty.")
         end
-
+    
         if isEquippedItemActivelyLevelingFlag then
             print_debug_general(slotName .. " is ALREADY equipped with an actively leveling item (progress < 100%). Priority 1 Met.")
             return 
@@ -769,7 +810,9 @@ EquipAllButton:SetScript("OnClick", function()
         print_debug_general(slotName .. ": Not blocked by an actively leveling equipped item. Looking for P2 (Attunable from bags) items...")
         local candidates = equipSlotCache[slotName] or {}
         local isEquipNewAffixesOnlyEnabled = (AttuneHelperDB["EquipNewAffixesOnly"] == 1) 
-
+    
+        -- P2: Look for attunable items from bags, prioritized by forge level and progress
+        local attunableCandidates = {}
         for _, rec in ipairs(candidates) do
             if rec.isAttunable then 
                 local recItemId = GetItemIDFromLink(rec.link) 
@@ -779,32 +822,46 @@ EquipAllButton:SetScript("OnClick", function()
                         print_debug_general("    Candidate QUALIFIES for equipping (ItemQualifiesForBagEquip=true based on EquipNewAffixesOnly=" ..tostring(isEquipNewAffixesOnlyEnabled)..")")
                         if CanEquipItemPolicyCheck(rec) then
                             print_debug_general("    Passed policy check.")
-                            local proceed = true
-                            if slotName == "MainHandSlot" and rec.equipSlot == "INVTYPE_2HWEAPON" then
-                                if not CanEquip2HInMainHandWithoutInterruptingOHAttunement() then proceed = false print_debug_general("    Proceed=false (2H would interrupt OH leveling)") end
-                            end
-                            if slotName == "SecondaryHandSlot" and cannotEquipOffHandWeaponThisSession and IsWeaponTypeForOffHandCheck(rec.equipSlot) then
-                                proceed = false print_debug_general("    Proceed=false (cannotEquipOffHandWeaponThisSession and is weapon type)")
-                            end
-                            if proceed then
-                                print_debug_general("    Proceeding to equip P2 bag item: " .. rec.link)
-                                if performEquipAction(rec, eqID, slotName) then
-                                    if rec.equipSlot == "INVTYPE_2HWEAPON" and (slotName == "MainHandSlot" or slotName == "RangedSlot") then
-                                        twoHanderEquippedInMainHandThisEquipCycle = true
-                                        print_debug_general("    Set twoHanderEquippedInMainHandThisEquipCycle = true")
-                                    end
-                                    return 
-                                end
-                            else print_debug_general("    Not proceeding with equip for P2 bag item " .. rec.link) end
-                        else print_debug_general("    Failed policy check for P2 bag item " .. rec.link) end
+                            table.insert(attunableCandidates, rec)
+                        else 
+                            print_debug_general("    Failed policy check for P2 bag item " .. rec.link) 
+                        end
                     else
                         print_debug_general("    Candidate '" .. (rec.name or "Unknown") .. "' does NOT qualify for equipping (ItemQualifiesForBagEquip=false based on EquipNewAffixesOnly="..tostring(isEquipNewAffixesOnlyEnabled)..").")
                     end
                 end
             end
         end
+    
+        -- Sort candidates by priority (higher forge level and lower progress first)
+        table.sort(attunableCandidates, function(a, b)
+            return ShouldPrioritizeItem(a.link, b.link)
+        end)
+    
+        -- Try to equip the best candidate
+        for _, rec in ipairs(attunableCandidates) do
+            local proceed = true
+            if slotName == "MainHandSlot" and rec.equipSlot == "INVTYPE_2HWEAPON" then
+                if not CanEquip2HInMainHandWithoutInterruptingOHAttunement() then proceed = false print_debug_general("    Proceed=false (2H would interrupt OH leveling)") end
+            end
+            if slotName == "SecondaryHandSlot" and cannotEquipOffHandWeaponThisSession and IsWeaponTypeForOffHandCheck(rec.equipSlot) then
+                proceed = false print_debug_general("    Proceed=false (cannotEquipOffHandWeaponThisSession and is weapon type)")
+            end
+            if proceed then
+                print_debug_general("    Proceeding to equip P2 bag item: " .. rec.link)
+                if performEquipAction(rec, eqID, slotName) then
+                    if rec.equipSlot == "INVTYPE_2HWEAPON" and (slotName == "MainHandSlot" or slotName == "RangedSlot") then
+                        twoHanderEquippedInMainHandThisEquipCycle = true
+                        print_debug_general("    Set twoHanderEquippedInMainHandThisEquipCycle = true")
+                    end
+                    return 
+                end
+            else 
+                print_debug_general("    Not proceeding with equip for P2 bag item " .. rec.link) 
+            end
+        end
         print_debug_general(slotName .. ": Finished P2 (Attunable from bags) candidates loop. No P2 item equipped.")
-
+    
         print_debug_ahset(slotName, "Starting P3 (AHSet) evaluation.")
         if equippedItemLink and equippedItemName and AHSetList[equippedItemName] == slotName then
             print_debug_ahset(slotName, "Equipped item '" .. equippedItemName .. "' IS the designated AHSet item for this slot. Skipping P3 bag candidates.")
@@ -816,16 +873,16 @@ EquipAllButton:SetScript("OnClick", function()
         end
         
         local currentMHLink_forAHSetOHCheck = GetInventoryItemLink("player", GetInventorySlotInfo("MainHandSlot"))
-
+    
         for _, rec_set in ipairs(candidates) do
             local designatedSlotForCandidate = AHSetList[rec_set.name] 
             print_debug_ahset(slotName, "Checking AHSet bag candidate: '" .. rec_set.name .. "' (" .. rec_set.link .. "). AHSetList designation: " .. tostring(designatedSlotForCandidate))
-
+    
             if designatedSlotForCandidate == slotName then 
                 print_debug_ahset(slotName, "Candidate '" .. rec_set.name .. "' IS designated in AHSetList for current slot (" .. slotName .. ").")
                 local candidateEquipLoc = rec_set.equipSlot
                 local equipThisSetItem = false 
-
+    
                 if slotName == "MainHandSlot" then
                     if candidateEquipLoc == "INVTYPE_WEAPON" or candidateEquipLoc == "INVTYPE_2HWEAPON" or candidateEquipLoc == "INVTYPE_WEAPONMAINHAND" then equipThisSetItem = true end
                 elseif slotName == "SecondaryHandSlot" then
@@ -847,7 +904,7 @@ EquipAllButton:SetScript("OnClick", function()
                 end
                 
                 print_debug_ahset(slotName, "Candidate '" .. rec_set.name .. "' type (" .. candidateEquipLoc .. ") suitable for target slot " .. slotName .. "? Result: " .. tostring(equipThisSetItem))
-
+    
                 if equipThisSetItem then
                     local passesPolicy = CanEquipItemPolicyCheck(rec_set)
                     print_debug_ahset(slotName, "Candidate '" .. rec_set.name .. "' passes CanEquipItemPolicyCheck? Result: " .. tostring(passesPolicy))
@@ -871,7 +928,7 @@ EquipAllButton:SetScript("OnClick", function()
                         end
                         
                         print_debug_ahset(slotName, "Final 'proceed' decision for AHSet item '"..rec_set.name.."': " .. tostring(proceed))
-
+    
                         if proceed then
                             print_debug_ahset(slotName, "ATTEMPTING EQUIP of P3 (AHSet) item: " .. rec_set.link .. " into " .. slotName)
                             if performEquipAction(rec_set, eqID, slotName) then 
@@ -890,7 +947,7 @@ EquipAllButton:SetScript("OnClick", function()
             end
         end
         print_debug_ahset(slotName, "Finished P3 (AHSet from bags) candidates loop. No P3 item was equipped from bags.")
-
+    
         if slotName=="SecondaryHandSlot"and cannotEquipOffHandWeaponThisSession then
             print_debug_ahset(slotName, "In cannotEquipOffHandWeaponThisSession block, looking for non-weapon offhands (AHSet or Attunable).")
             for _,r_oh_c in ipairs(candidates)do
@@ -1186,38 +1243,40 @@ VendorAttunedButton:SetScript("OnClick",function()
                     end 
                     
                     if not skip then
-                        local isConsideredFullyAttunedForSelling = false
-                        local progress = 100 -- Assume fully attuned if API not available
+                        -- Check if THIS SPECIFIC VARIANT is fully attuned
+                        local thisVariantProgress = 0
                         if _G.GetItemLinkAttuneProgress then 
-                            progress = GetItemLinkAttuneProgress(link)
-                            if type(progress) ~= "number" then progress = 100 end
-                        else
-                            -- Fallback if GetItemLinkAttuneProgress is not available but old GetItemAttuneProgress is
-                            if _G.GetItemAttuneProgress then
-                                local apiForgeTypeParam = ConvertForgeMapToApiParam(GetForgeLevelFromLink(link))
-                                progress = GetItemAttuneProgress(id, nil, apiForgeTypeParam) or 100
-                                if type(progress) ~= "number" then progress = 100 end
-                            else
-                                print_debug_general("VendorAttuned: Attunement progress API (GetItemLinkAttuneProgress or GetItemAttuneProgress) missing.")
+                            thisVariantProgress = GetItemLinkAttuneProgress(link)
+                            if type(thisVariantProgress) ~= "number" then 
+                                thisVariantProgress = 0 
+                                print_debug_general("VendorAttuned: GetItemLinkAttuneProgress returned non-number for " .. link .. ": " .. tostring(thisVariantProgress))
                             end
-                        end
-
-                        if progress >= 100 then
-                            isConsideredFullyAttunedForSelling = true
-                        elseif _G.HasAttunedAnyVariantOfItem and HasAttunedAnyVariantOfItem(id) then
-                            isConsideredFullyAttunedForSelling = true 
+                        else
+                            print_debug_general("VendorAttuned: GetItemLinkAttuneProgress API not available for " .. link)
                         end
                         
+                        -- Only consider this item for selling if THIS specific variant is 100% attuned
+                        local isThisVariantFullyAttuned = (thisVariantProgress >= 100)
+                        
+                        if not isThisVariantFullyAttuned then
+                            print_debug_general("VendorAttuned: Skipping " .. n .. " - this variant only " .. thisVariantProgress .. "% attuned")
+                            skip = true
+                        else
+                            print_debug_general("VendorAttuned: " .. n .. " - this variant is " .. thisVariantProgress .. "% attuned, eligible for selling")
+                        end
+                    end
+                    
+                    if not skip then
                         local isBoEU=IsBoEUnbound(id,b,s) 
                         local isM=id>=MYTHIC_MIN_ITEMID 
-                        local noSellBoE=(AttuneHelperDB["Do Not Sell BoE Items"]==1 and isConsideredFullyAttunedForSelling and isBoEU) 
+                        local noSellBoE=(AttuneHelperDB["Do Not Sell BoE Items"]==1 and isBoEU) 
                         local sellM=(AttuneHelperDB["Sell Attuned Mythic Gear?"]==1) 
                         local doSell=(isM and sellM) or not isM
                         
-                        if isConsideredFullyAttunedForSelling and doSell and not noSellBoE then 
+                        if doSell and not noSellBoE then 
                             UseContainerItem(b,s) 
                             sold=sold+1 
-                            print("|cffffd200[Attune Helper]|r Sold: " .. n)
+                            print("|cffffd200[Attune Helper]|r Sold: " .. n .. " (" .. thisVariantProgress .. "% attuned)")
                         end
                     end
                 end 
