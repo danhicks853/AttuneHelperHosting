@@ -3,7 +3,7 @@ AHSetList = AHSetList or {} -- Now stores itemName = "TargetSlotName"
 AttuneHelperDB = AttuneHelperDB or {}
 
 -- ****** DEBUGGING TOGGLE ******
-local GENERAL_DEBUG_MODE = true -- Set to true for original broad debug messages
+local GENERAL_DEBUG_MODE = false -- Set to true for original broad debug messages
 local AHSET_DEBUG_MODE = false   -- Set to true for focused AHSet debugging
 local function print_debug_general(msg)
     if GENERAL_DEBUG_MODE then
@@ -1284,7 +1284,6 @@ VendorAttunedButton:SetScript("OnClick",function()
         end 
     end
 end)
-
 ApplyButtonTheme(AttuneHelperDB["Button Theme"])
 AttuneHelperItemCountText=AttuneHelper:CreateFontString(nil,"OVERLAY","GameFontNormal") AttuneHelperItemCountText:SetPoint("BOTTOM",0,6) AttuneHelperItemCountText:SetFont("Fonts\\FRIZQT__.TTF",13,"OUTLINE") AttuneHelperItemCountText:SetTextColor(1,1,1,1) AttuneHelperItemCountText:SetText("Attunables in Inventory: 0")
 AH_wait(4,UpdateItemCountText)
