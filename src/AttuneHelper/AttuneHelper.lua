@@ -1244,15 +1244,18 @@ VendorAttunedButton:SetScript("OnClick",function()
                     
                     if not skip then
                         -- Check if THIS SPECIFIC VARIANT is fully attuned
-                        local thisVariantProgress = 0
+                        local thisVariantProgress = 0  -- Default to 0
                         if _G.GetItemLinkAttuneProgress then 
-                            thisVariantProgress = GetItemLinkAttuneProgress(link)
-                            if type(thisVariantProgress) ~= "number" then 
-                                thisVariantProgress = 0 
-                                print_debug_general("VendorAttuned: GetItemLinkAttuneProgress returned non-number for " .. link .. ": " .. tostring(thisVariantProgress))
+                            local progress = GetItemLinkAttuneProgress(link)
+                            if type(progress) == "number" then 
+                                thisVariantProgress = progress
+                            else
+                                print_debug_general("VendorAttuned: GetItemLinkAttuneProgress returned non-number for " .. link .. ": " .. tostring(progress))
+                                thisVariantProgress = 0  -- Ensure it's still 0 if not a number
                             end
                         else
                             print_debug_general("VendorAttuned: GetItemLinkAttuneProgress API not available for " .. link)
+                            thisVariantProgress = 0  -- Ensure it's 0 if API not available
                         end
                         
                         -- Only consider this item for selling if THIS specific variant is 100% attuned
@@ -1276,7 +1279,9 @@ VendorAttunedButton:SetScript("OnClick",function()
                         if doSell and not noSellBoE then 
                             UseContainerItem(b,s) 
                             sold=sold+1 
-                            print("|cffffd200[Attune Helper]|r Sold: " .. n .. " (" .. thisVariantProgress .. "% attuned)")
+                            -- Ensure thisVariantProgress is never nil here
+                            local progressText = tostring(thisVariantProgress or 0)
+                            print("|cffffd200[Attune Helper]|r Sold: " .. n .. " (" .. progressText .. "% attuned)")
                         end
                     end
                 end 
@@ -1284,6 +1289,7 @@ VendorAttunedButton:SetScript("OnClick",function()
         end 
     end
 end)
+
 ApplyButtonTheme(AttuneHelperDB["Button Theme"])
 AttuneHelperItemCountText=AttuneHelper:CreateFontString(nil,"OVERLAY","GameFontNormal") AttuneHelperItemCountText:SetPoint("BOTTOM",0,6) AttuneHelperItemCountText:SetFont("Fonts\\FRIZQT__.TTF",13,"OUTLINE") AttuneHelperItemCountText:SetTextColor(1,1,1,1) AttuneHelperItemCountText:SetText("Attunables in Inventory: 0")
 AH_wait(4,UpdateItemCountText)
