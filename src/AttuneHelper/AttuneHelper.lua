@@ -279,26 +279,30 @@ local function UpdateItemCountText()
 end
 
 local function GetAttunableItemNamesList()
-  local itemNames = {}
-  if synEXTloaded then
-      local isStrictEquip = (AttuneHelperDB["EquipNewAffixesOnly"] == 1)
-      for _, bagTbl in pairs(bagSlotCache) do
-          if bagTbl then
-              for _, rec in pairs(bagTbl) do
-                  if rec and rec.isAttunable then
-                      local itemId = GetItemIDFromLink(rec.link)
-                      if itemId then
-                          if ItemQualifiesForBagEquip(itemId, rec.link, isStrictEquip) then
-                              table.insert(itemNames, rec.name or "Unknown Item") -- Add item name
-                          end
-                      end
-                  end
-              end
-          end
-      end
+    local itemData = {}
+    if synEXTloaded then
+        local isStrictEquip = (AttuneHelperDB["EquipNewAffixesOnly"] == 1)
+        for _, bagTbl in pairs(bagSlotCache) do
+            if bagTbl then
+                for _, rec in pairs(bagTbl) do
+                    if rec and rec.isAttunable then
+                        local itemId = GetItemIDFromLink(rec.link)
+                        if itemId then
+                            if ItemQualifiesForBagEquip(itemId, rec.link, isStrictEquip) then
+                                table.insert(itemData, {
+                                    name = rec.name or "Unknown Item",
+                                    link = rec.link,
+                                    id = itemId
+                                })
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return itemData
   end
-  return itemNames
-end
 
 local function InitializeDefaultSettings()
     if AttuneHelperDB["Background Style"]==nil then AttuneHelperDB["Background Style"]="Tooltip" end
@@ -1294,50 +1298,240 @@ ApplyButtonTheme(AttuneHelperDB["Button Theme"])
 AttuneHelperItemCountText=AttuneHelper:CreateFontString(nil,"OVERLAY","GameFontNormal") AttuneHelperItemCountText:SetPoint("BOTTOM",0,6) AttuneHelperItemCountText:SetFont("Fonts\\FRIZQT__.TTF",13,"OUTLINE") AttuneHelperItemCountText:SetTextColor(1,1,1,1) AttuneHelperItemCountText:SetText("Attunables in Inventory: 0")
 AH_wait(4,UpdateItemCountText)
 local function CreateMiniIconButton(name,parent,iconPath,size,tooltipText)
-  local btn=CreateFrame("Button",name,parent)
-  btn:SetSize(size,size)
-  btn:SetNormalTexture(iconPath)
-  btn:SetBackdrop({edgeFile="Interface\\Buttons\\UI-Quickslot-Depress",edgeSize=2,insets={left=-1,right=-1,top=-1,bottom=-1}})
-  btn:SetBackdropBorderColor(0.4,0.4,0.4,0.6)
-  local hl=btn:CreateTexture(nil,"HIGHLIGHT")
-  hl:SetAllPoints(btn)
-  hl:SetTexture(iconPath)
-  hl:SetBlendMode("ADD")
-  hl:SetVertexColor(0.2,0.2,0.2,0.3)
-  btn:SetScript("OnMouseDown",function(s)s:GetNormalTexture():SetVertexColor(0.75,0.75,0.75)end)
-  btn:SetScript("OnMouseUp",function(s)s:GetNormalTexture():SetVertexColor(1,1,1)end)
-
-  if tooltipText then
-      btn:SetScript("OnEnter", function(s)
-          GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
-          GameTooltip:SetText(tooltipText)
-
-          -- ****** MODIFIED PART ******
-          if name == "AttuneHelperMiniEquipButton" then -- Specifically for the mini equip button
-              local attunableNames = GetAttunableItemNamesList()
-              local count = #attunableNames
-
-              if count > 0 then
-                  GameTooltip:AddLine(string.format("Qualifying Attunables (%d):", count), 1, 1, 0) -- Yellow text
-                  for _, itemName in ipairs(attunableNames) do
-                      GameTooltip:AddLine("- " .. itemName, 0.8, 0.8, 0.8, true) -- Lighter grey for item names
-                  end
-              else
-                  GameTooltip:AddLine("No qualifying attunables in bags.", 1, 0.5, 0.5, true) -- Reddish if none
-              end
-          -- The old code for EquipAllButton was here too, but EquipAllButton's tooltip is set separately later.
-          -- For other mini buttons, if they had count logic, it would go here or be an `elseif`.
-          end
-          -- ****** END MODIFIED PART ******
-          GameTooltip:Show()
-      end)
-      btn:SetScript("OnLeave", GameTooltip_Hide)
+    local btn=CreateFrame("Button",name,parent)
+    btn:SetSize(size,size)
+    btn:SetNormalTexture(iconPath)
+    btn:SetBackdrop({edgeFile="Interface\\Buttons\\UI-Quickslot-Depress",edgeSize=2,insets={left=-1,right=-1,top=-1,bottom=-1}})
+    btn:SetBackdropBorderColor(0.4,0.4,0.4,0.6)
+    local hl=btn:CreateTexture(nil,"HIGHLIGHT")
+    hl:SetAllPoints(btn)
+    hl:SetTexture(iconPath)
+    hl:SetBlendMode("ADD")
+    hl:SetVertexColor(0.2,0.2,0.2,0.3)
+    btn:SetScript("OnMouseDown",function(s)s:GetNormalTexture():SetVertexColor(0.75,0.75,0.75)end)
+    btn:SetScript("OnMouseUp",function(s)s:GetNormalTexture():SetVertexColor(1,1,1)end)
+  
+    -- Only add simple tooltip for non-equip buttons
+    if tooltipText and name ~= "AttuneHelperMiniEquipButton" then
+        btn:SetScript("OnEnter", function(s)
+            GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+            GameTooltip:SetText(tooltipText)
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", GameTooltip_Hide)
+    end
+    return btn
   end
-  return btn
-end
+
 AttuneHelperMiniFrame=CreateFrame("Frame","AttuneHelperMiniFrame",UIParent) AttuneHelperMiniFrame:SetSize(88,32) AttuneHelperMiniFrame:SetPoint(unpack(AttuneHelperDB.MiniFramePosition)) AttuneHelperMiniFrame:EnableMouse(true) AttuneHelperMiniFrame:SetMovable(true) AttuneHelperMiniFrame:RegisterForDrag("LeftButton") AttuneHelperMiniFrame:SetScript("OnDragStart",function(s)if s:IsMovable()then s:StartMoving()end end) AttuneHelperMiniFrame:SetScript("OnDragStop",function(s)s:StopMovingOrSizing() AttuneHelperDB.MiniFramePosition={s:GetPoint()}end) AttuneHelperMiniFrame:SetBackdrop({bgFile=BgStyles.MiniModeBg,edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=8,edgeSize=16,insets={left=1,right=1,top=1,bottom=1}}) AttuneHelperMiniFrame:SetBackdropColor(AttuneHelperDB["Background Color"][1],AttuneHelperDB["Background Color"][2],AttuneHelperDB["Background Color"][3],AttuneHelperDB["Background Color"][4]) AttuneHelperMiniFrame:SetBackdropBorderColor(0.3,0.3,0.3,0.8) AttuneHelperMiniFrame:Hide()
 local mBS = 24 local mS = 4 local fP = (AttuneHelperMiniFrame:GetHeight() - mBS) / 2
-AttuneHelperMiniEquipButton=CreateMiniIconButton("AttuneHelperMiniEquipButton",AttuneHelperMiniFrame,"Interface\\Addons\\AttuneHelper\\assets\\icon1.blp",mBS,"Equip Attunables") AttuneHelperMiniEquipButton:SetPoint("LEFT",AttuneHelperMiniFrame,"LEFT",fP,0) if EquipAllButton then AttuneHelperMiniEquipButton:SetScript("OnClick",function()if EquipAllButton:GetScript("OnClick")then EquipAllButton:GetScript("OnClick")()end end)end AttuneHelperMiniSortButton=CreateMiniIconButton("AttuneHelperMiniSortButton",AttuneHelperMiniFrame,"Interface\\Addons\\AttuneHelper\\assets\\icon2.blp",mBS,"Prepare Disenchant") AttuneHelperMiniSortButton:SetPoint("LEFT",AttuneHelperMiniEquipButton,"RIGHT",mS,0) if SortInventoryButton then AttuneHelperMiniSortButton:SetScript("OnClick",function()if SortInventoryButton:GetScript("OnClick")then SortInventoryButton:GetScript("OnClick")()end end)end AttuneHelperMiniVendorButton=CreateMiniIconButton("AttuneHelperMiniVendorButton",AttuneHelperMiniFrame,"Interface\\Addons\\AttuneHelper\\assets\\icon3.blp",mBS,"Vendor Attuned") AttuneHelperMiniVendorButton:SetPoint("LEFT",AttuneHelperMiniSortButton,"RIGHT",mS,0) if VendorAttunedButton then AttuneHelperMiniVendorButton:SetScript("OnClick",function()if VendorAttunedButton:GetScript("OnClick")then VendorAttunedButton:GetScript("OnClick")()end end)end if EquipAllButton then EquipAllButton:SetScript("OnEnter",function(s)GameTooltip:SetOwner(s,"ANCHOR_RIGHT") GameTooltip:SetText("Equip Attunables") GameTooltip:AddLine(string.format("Attunable Items: %d",currentAttunableItemCount),1,1,0) GameTooltip:Show()end) EquipAllButton:SetScript("OnLeave",GameTooltip_Hide)end
+AttuneHelperMiniEquipButton = CreateMiniIconButton(
+    "AttuneHelperMiniEquipButton",
+    AttuneHelperMiniFrame,
+    "Interface\\Addons\\AttuneHelper\\assets\\icon1.blp",
+    mBS,
+    "Equip Attunables"
+)
+AttuneHelperMiniEquipButton:SetPoint("LEFT", AttuneHelperMiniFrame, "LEFT", fP, 0)
+
+if EquipAllButton then 
+    AttuneHelperMiniEquipButton:SetScript("OnClick", function()
+        if EquipAllButton:GetScript("OnClick") then 
+            EquipAllButton:GetScript("OnClick")()
+        end 
+    end)
+end
+
+-- Override the tooltip for the mini equip button to include icons
+AttuneHelperMiniEquipButton:SetScript("OnEnter", function(s)
+    GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Equip Attunables")
+    
+    local attunableData = GetAttunableItemNamesList()
+    local count = #attunableData
+
+    if count > 0 then
+        GameTooltip:AddLine(string.format("Qualifying Attunables (%d):", count), 1, 1, 0) -- Yellow text
+        for _, itemData in ipairs(attunableData) do
+            -- Get item icon
+            local itemTexture = GetItemIcon(itemData.id) or GetItemIcon(itemData.link)
+            local iconText = ""
+            
+            if itemTexture then
+                -- Create icon texture code (16x16 size)
+                iconText = string.format("|T%s:16:16:0:0|t ", itemTexture)
+            end
+            
+            -- Add the line with icon and item name
+            GameTooltip:AddLine(iconText .. itemData.name, 0.8, 0.8, 0.8, true)
+        end
+    else
+        GameTooltip:AddLine("No qualifying attunables in bags.", 1, 0.5, 0.5, true) -- Reddish if none
+    end
+    
+    GameTooltip:Show()
+end)
+AttuneHelperMiniEquipButton:SetScript("OnLeave", GameTooltip_Hide)
+
+-- Create and setup AttuneHelperMiniSortButton  
+AttuneHelperMiniSortButton = CreateMiniIconButton(
+    "AttuneHelperMiniSortButton",
+    AttuneHelperMiniFrame,
+    "Interface\\Addons\\AttuneHelper\\assets\\icon2.blp",
+    mBS,
+    "Prepare Disenchant"
+)
+AttuneHelperMiniSortButton:SetPoint("LEFT", AttuneHelperMiniEquipButton, "RIGHT", mS, 0)
+
+if SortInventoryButton then 
+    AttuneHelperMiniSortButton:SetScript("OnClick", function()
+        if SortInventoryButton:GetScript("OnClick") then 
+            SortInventoryButton:GetScript("OnClick")()
+        end 
+    end)
+end
+
+-- Create and setup AttuneHelperMiniVendorButton
+AttuneHelperMiniVendorButton = CreateMiniIconButton(
+    "AttuneHelperMiniVendorButton",
+    AttuneHelperMiniFrame,
+    "Interface\\Addons\\AttuneHelper\\assets\\icon3.blp",
+    mBS,
+    "Vendor Attuned"
+)
+AttuneHelperMiniVendorButton:SetPoint("LEFT", AttuneHelperMiniSortButton, "RIGHT", mS, 0)
+
+if VendorAttunedButton then 
+    AttuneHelperMiniVendorButton:SetScript("OnClick", function()
+        if VendorAttunedButton:GetScript("OnClick") then 
+            VendorAttunedButton:GetScript("OnClick")()
+        end 
+    end)
+end
+
+-- Setup the main EquipAllButton tooltip with icons
+if EquipAllButton then 
+    EquipAllButton:SetScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_RIGHT") 
+        GameTooltip:SetText("Equip Attunables") 
+        GameTooltip:AddLine(string.format("Attunable Items: %d", currentAttunableItemCount), 1, 1, 0)
+        
+        -- Add detailed list with icons
+        local attunableData = GetAttunableItemNamesList()
+        if #attunableData > 0 then
+            GameTooltip:AddLine(" ") -- Empty line for spacing
+            for _, itemData in ipairs(attunableData) do
+                -- Get item info including quality and texture
+                local _, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(itemData.link)
+                local iconText = ""
+                
+                if itemTexture then
+                    iconText = string.format("|T%s:16:16:0:0|t ", itemTexture)
+                end
+                
+                -- Get item quality color
+                local qualityColor = ITEM_QUALITY_COLORS[itemQuality or 1]
+                local r, g, b = 0.8, 0.8, 0.8 -- default color
+                if qualityColor then
+                    r, g, b = qualityColor.r, qualityColor.g, qualityColor.b
+                end
+                
+                -- Build item name with forge/mythic indicators
+                local itemName = itemData.name
+                local indicators = {}
+                
+                -- Check if mythic
+                if itemData.id >= MYTHIC_MIN_ITEMID then
+                    table.insert(indicators, "|cffFF6600[Mythic]|r")
+                end
+                
+                -- Check forge level
+                local forgeLevel = GetForgeLevelFromLink(itemData.link)
+                if forgeLevel == FORGE_LEVEL_MAP.WARFORGED then
+                    table.insert(indicators, "|cff9900FF[WF]|r")
+                elseif forgeLevel == FORGE_LEVEL_MAP.LIGHTFORGED then
+                    table.insert(indicators, "|cffFFD700[LF]|r")
+                elseif forgeLevel == FORGE_LEVEL_MAP.TITANFORGED then
+                    table.insert(indicators, "|cff00CCFF[TF]|r")
+                end
+                
+                -- Combine name with indicators
+                local displayName = itemName
+                if #indicators > 0 then
+                    displayName = displayName .. " " .. table.concat(indicators, " ")
+                end
+                
+                GameTooltip:AddLine(iconText .. displayName, r, g, b, true)
+            end
+        end
+        
+        GameTooltip:Show()
+    end) 
+    EquipAllButton:SetScript("OnLeave", GameTooltip_Hide)
+end
+
+-- Override the tooltip for the mini equip button to include icons
+AttuneHelperMiniEquipButton:SetScript("OnEnter", function(s)
+    GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Equip Attunables")
+    
+    local attunableData = GetAttunableItemNamesList()
+    local count = #attunableData
+
+    if count > 0 then
+        GameTooltip:AddLine(string.format("Qualifying Attunables (%d):", count), 1, 1, 0) -- Yellow text
+        for _, itemData in ipairs(attunableData) do
+            -- Get item info including quality and texture
+            local _, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(itemData.link)
+            local iconText = ""
+            
+            if itemTexture then
+                -- Create icon texture code (16x16 size)
+                iconText = string.format("|T%s:16:16:0:0|t ", itemTexture)
+            end
+            
+            -- Get item quality color
+            local qualityColor = ITEM_QUALITY_COLORS[itemQuality or 1]
+            local r, g, b = 0.8, 0.8, 0.8 -- default color
+            if qualityColor then
+                r, g, b = qualityColor.r, qualityColor.g, qualityColor.b
+            end
+            
+            -- Build item name with forge/mythic indicators
+            local itemName = itemData.name
+            local indicators = {}
+            
+            -- Check if mythic
+            if itemData.id >= MYTHIC_MIN_ITEMID then
+                table.insert(indicators, "|cffFF6600[Mythic]|r")
+            end
+            
+            -- Check forge level
+            local forgeLevel = GetForgeLevelFromLink(itemData.link)
+            if forgeLevel == FORGE_LEVEL_MAP.WARFORGED then
+                table.insert(indicators, "|cff9900FF[WF]|r")
+            elseif forgeLevel == FORGE_LEVEL_MAP.LIGHTFORGED then
+                table.insert(indicators, "|cffFFD700[LF]|r")
+            elseif forgeLevel == FORGE_LEVEL_MAP.TITANFORGED then
+                table.insert(indicators, "|cff00CCFF[TF]|r")
+            end
+            
+            -- Combine name with indicators
+            local displayName = itemName
+            if #indicators > 0 then
+                displayName = displayName .. " " .. table.concat(indicators, " ")
+            end
+            
+            -- Add the line with icon and colored item name
+            GameTooltip:AddLine(iconText .. displayName, r, g, b, true)
+        end
+    else
+        GameTooltip:AddLine("No qualifying attunables in bags.", 1, 0.5, 0.5, true) -- Reddish if none
+    end
+    
+    GameTooltip:Show()
+end)
+AttuneHelperMiniEquipButton:SetScript("OnLeave", GameTooltip_Hide)
 
 AttuneHelper_UpdateDisplayMode = function()
     if not AttuneHelperFrame or not AttuneHelperMiniFrame then return end
