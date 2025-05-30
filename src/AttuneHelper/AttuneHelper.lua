@@ -1284,6 +1284,7 @@ VendorAttunedButton:SetScript("OnClick",function()
         end 
     end
 end)
+
 ApplyButtonTheme(AttuneHelperDB["Button Theme"])
 AttuneHelperItemCountText=AttuneHelper:CreateFontString(nil,"OVERLAY","GameFontNormal") AttuneHelperItemCountText:SetPoint("BOTTOM",0,6) AttuneHelperItemCountText:SetFont("Fonts\\FRIZQT__.TTF",13,"OUTLINE") AttuneHelperItemCountText:SetTextColor(1,1,1,1) AttuneHelperItemCountText:SetText("Attunables in Inventory: 0")
 AH_wait(4,UpdateItemCountText)
