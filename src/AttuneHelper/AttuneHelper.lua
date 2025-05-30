@@ -935,78 +935,295 @@ SortInventoryButton = CreateButton("AttuneHelperSortInventoryButton",AttuneHelpe
 SortInventoryButton:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_RIGHT") GameTooltip:SetText("Moves Mythic items to Bag 0.") GameTooltip:Show() end)
 SortInventoryButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 SortInventoryButton:SetScript("OnClick", function()
-  local bagZ, mythic, ignoredM, emptyS, ignoredL = {},{},{},{},{} for n in pairs(AHIgnoreList) do ignoredL[string.lower(n)]=true end
-  local function IsMythic(id) if not id then return false end local tt=CreateFrame("GameTooltip","ITS",nil,"GameTooltipTemplate") tt:SetOwner(UIParent,"ANCHOR_NONE") tt:SetHyperlink("item:"..id) for i=1,tt:NumLines() do local l=_G["ITSTextLeft"..i]:GetText() if l and string.find(l,"Mythic") then tt:Hide() return true end end tt:Hide() return false end
-  local eC=0 for b=0,4 do for s=1,GetContainerNumSlots(b) do if not GetContainerItemID(b,s) then eC=eC+1 end end end if eC<16 then print("|cffff0000[Attune Helper]|r: Need 16 empty slots.") return end
-  wipe(emptyS) wipe(bagZ) wipe(mythic) wipe(ignoredM)
-  for b=0,4 do for s=1,GetContainerNumSlots(b) do local id=GetContainerItemID(b,s) if id then local n=GetItemInfo(id) local iM=IsMythic(id) local iG=false if type(n)=="string" and n~="" then iG=ignoredL[string.lower(n)] end if b==0 then if not iM then table.insert(bagZ,{b=b,s=s,id=id}) elseif iG then table.insert(ignoredM,{b=b,s=s,id=id}) elseif iM and not iG then table.insert(mythic,{b=b,s=s,id=id}) end else table.insert(emptyS,{b=b,s=s,id=id}) end else table.insert(emptyS,{b=b,s=s,id=nil}) end end end
-  for _,i in ipairs(ignoredM) do if #emptyS>0 then local t=table.remove(emptyS) if t.id then PickupContainerItem(t.b,t.s) end PickupContainerItem(i.b,i.s) if t.id then PickupContainerItem(i.b,i.s) else PickupContainerItem(t.b,t.s) end end end
-  for _,i in ipairs(bagZ) do if #emptyS>0 then local t=table.remove(emptyS) if t.id then PickupContainerItem(t.b,t.s) end PickupContainerItem(i.b,i.s) if t.id then PickupContainerItem(i.b,i.s) else PickupContainerItem(t.b,t.s) end end end
-  for _,i in ipairs(mythic) do if #emptyS>0 then local t=table.remove(emptyS,1) if t.id then PickupContainerItem(t.b,t.s) end PickupContainerItem(i.b,i.s) if t.id then PickupContainerItem(i.b,i.s) else PickupContainerItem(t.b,t.s) end end end
+    local bagZ, mythic, ignoredM, emptyS, ignoredL = {}, {}, {}, {}, {}
+    
+    -- Build ignored list (case-insensitive)
+    for n in pairs(AHIgnoreList) do 
+        ignoredL[string.lower(n)] = true 
+    end
+    
+    -- Improved mythic detection function
+    local function IsMythic(id)
+        if not id then return false end
+        
+        -- First check: ID-based detection for known mythic range
+        if id >= MYTHIC_MIN_ITEMID then return true end
+        
+        -- Second check: Tooltip scanning for "Mythic" text
+        local tt = CreateFrame("GameTooltip", "AttuneHelperMythicScanTooltip", nil, "GameTooltipTemplate")
+        tt:SetOwner(UIParent, "ANCHOR_NONE")
+        tt:SetHyperlink("item:" .. id)
+        
+        for i = 1, tt:NumLines() do
+            local line = _G["AttuneHelperMythicScanTooltipTextLeft" .. i]
+            if line then
+                local text = line:GetText()
+                if text and string.find(text, "Mythic", 1, true) then
+                    tt:Hide()
+                    return true
+                end
+            end
+        end
+        
+        tt:Hide()
+        return false
+    end
+    
+    -- Check for enough empty slots
+    local emptyCount = 0
+    for b = 0, 4 do
+        for s = 1, GetContainerNumSlots(b) do
+            if not GetContainerItemID(b, s) then
+                emptyCount = emptyCount + 1
+            end
+        end
+    end
+    
+    if emptyCount < 16 then
+        print("|cffff0000[Attune Helper]|r: Need at least 16 empty slots for sorting.")
+        return
+    end
+    
+    -- Clear tables
+    wipe(emptyS)
+    wipe(bagZ)
+    wipe(mythic)
+    wipe(ignoredM)
+    
+    -- Track which slots in bag 0 will become available
+    local availableBag0Slots = {}
+    
+    -- Scan all bags and categorize items
+    for b = 0, 4 do
+        for s = 1, GetContainerNumSlots(b) do
+            local id = GetContainerItemID(b, s)
+            if id then
+                local name = GetItemInfo(id)
+                local isMythicItem = IsMythic(id)
+                local isIgnored = false
+                
+                if type(name) == "string" and name ~= "" then
+                    isIgnored = ignoredL[string.lower(name)]
+                end
+                
+                if b == 0 then
+                    -- Items currently in bag 0
+                    if not isMythicItem then
+                        -- Non-mythic items in bag 0 (need to move out)
+                        table.insert(bagZ, {b = b, s = s, id = id, name = name})
+                        table.insert(availableBag0Slots, s) -- This slot will become available
+                    elseif isIgnored then
+                        -- Ignored mythic items in bag 0 (need to move out)
+                        table.insert(ignoredM, {b = b, s = s, id = id, name = name})
+                        table.insert(availableBag0Slots, s) -- This slot will become available
+                    else
+                        -- Mythic items already in bag 0 (leave them)
+                        table.insert(mythic, {b = b, s = s, id = id, name = name, alreadyInBag0 = true})
+                    end
+                else
+                    -- Items in other bags
+                    if isMythicItem and not isIgnored then
+                        -- Mythic items in other bags (need to move to bag 0)
+                        table.insert(mythic, {b = b, s = s, id = id, name = name})
+                    else
+                        -- Non-mythic or ignored items in other bags
+                        table.insert(emptyS, {b = b, s = s, id = id})
+                    end
+                end
+            else
+                -- Empty slots
+                table.insert(emptyS, {b = b, s = s, id = id})
+                if b == 0 then
+                    table.insert(availableBag0Slots, s) -- Already empty slots in bag 0
+                end
+            end
+        end
+    end
+    
+    -- Sort available bag 0 slots in ascending order
+    table.sort(availableBag0Slots)
+    
+    print("|cffffd200[Attune Helper]|r Found " .. #mythic .. " mythic items to sort.")
+    print("|cffffd200[Attune Helper]|r Available bag 0 slots: " .. table.concat(availableBag0Slots, ", "))
+    
+    -- Function to safely move items
+    local function MoveItem(fromBag, fromSlot, toBag, toSlot)
+        if GetContainerItemID(fromBag, fromSlot) then
+            PickupContainerItem(fromBag, fromSlot)
+            if GetContainerItemID(toBag, toSlot) then
+                -- Target slot has item, need to swap
+                PickupContainerItem(toBag, toSlot)
+                PickupContainerItem(fromBag, fromSlot)
+            else
+                -- Target slot is empty
+                PickupContainerItem(toBag, toSlot)
+            end
+        end
+    end
+    
+    -- Step 1: Move ignored mythic items out of bag 0
+    for _, item in ipairs(ignoredM) do
+        if #emptyS > 0 then
+            local target = table.remove(emptyS)
+            if target then
+                MoveItem(item.b, item.s, target.b, target.s)
+                print("|cffffd200[Attune Helper]|r Moved ignored mythic: " .. (item.name or "Unknown"))
+            end
+        end
+    end
+    
+    -- Step 2: Move non-mythic items out of bag 0
+    for _, item in ipairs(bagZ) do
+        if #emptyS > 0 then
+            local target = table.remove(emptyS)
+            if target then
+                MoveItem(item.b, item.s, target.b, target.s)
+                print("|cffffd200[Attune Helper]|r Moved non-mythic: " .. (item.name or "Unknown"))
+            end
+        end
+    end
+    
+    -- Step 3: Move mythic items to bag 0 using our pre-calculated available slots
+    local mythicsMoved = 0
+    local slotIndex = 1
+    
+    for _, item in ipairs(mythic) do
+        if not item.alreadyInBag0 and slotIndex <= #availableBag0Slots then
+            local targetSlot = availableBag0Slots[slotIndex]
+            MoveItem(item.b, item.s, 0, targetSlot)
+            mythicsMoved = mythicsMoved + 1
+            print("|cffffd200[Attune Helper]|r Moved mythic to bag 0 slot " .. targetSlot .. ": " .. (item.name or "Unknown"))
+            slotIndex = slotIndex + 1
+        elseif not item.alreadyInBag0 then
+            print("|cffff0000[Attune Helper]|r No more available slots in bag 0 for: " .. (item.name or "Unknown"))
+        end
+    end
+    
+    print("|cffffd200[Attune Helper]|r Sorting complete. Moved " .. mythicsMoved .. " mythic items to bag 0.")
 end)
 
 VendorAttunedButton = CreateButton("AttuneHelperVendorAttunedButton",AttuneHelper,"Vendor Attuned",SortInventoryButton,"BOTTOM",0,-27,nil,nil,nil,1.3)
 VendorAttunedButton:SetScript("OnClick",function()
-  if not MerchantFrame:IsShown() then return end local limit=(AttuneHelperDB["Limit Selling to 12 Items?"]==1) local maxS=limit and 12 or math.huge local sold=0
-  local boeScanTT = nil
-  local function IsBoEUnbound(itemID,bag,slot_idx)
-    if not itemID then return false end if not boeScanTT then boeScanTT=CreateFrame("GameTooltip","AHBoEScan",UIParent,"GameTooltipTemplate") end
-    boeScanTT:SetOwner(UIParent,"ANCHOR_NONE") boeScanTT:SetHyperlink("item:"..itemID) local isBoE=false
-    for i=1,boeScanTT:NumLines() do local lt=_G[boeScanTT:GetName().."TextLeft"..i] if lt and string.find(lt:GetText() or "","Binds when equipped") then isBoE=true break end end
-    if isBoE and bag and slot_idx then
-        boeScanTT:SetOwner(UIParent,"ANCHOR_NONE") boeScanTT:SetBagItem(bag,slot_idx)
-        for i=1,boeScanTT:NumLines() do local lt=_G[boeScanTT:GetName().."TextLeft"..i] if lt and string.find(lt:GetText() or "","Soulbound") then boeScanTT:Hide() return false end end
-    end 
-    boeScanTT:Hide() return isBoE
-  end
-  for b=0,4 do for s=1,GetContainerNumSlots(b) do if sold>=maxS then return end local link=GetContainerItemLink(b,s) local id=GetContainerItemID(b,s)
-    if link and id then local n,_,q,_,_,_,_,_,_,_,sellP=GetItemInfo(link) if n then 
-        local skip=false if AHIgnoreList[n] or (sellP==nil or sellP==0) then skip=true end
-        if not skip and GetNumEquipmentSets then 
-            for i=1,GetNumEquipmentSets() do local _,_,sID=GetEquipmentSetInfo(i) 
-                if sID then 
-                    local ids={GetEquipmentSetItemIDs(sID)}
-                    for _,idS in ipairs(ids) do 
-                        if idS and idS~=0 and idS==id then 
-                            skip=true break
+    if not MerchantFrame:IsShown() then return end 
+    local limit=(AttuneHelperDB["Limit Selling to 12 Items?"]==1) 
+    local maxS=limit and 12 or math.huge 
+    local sold=0
+    
+    local boeScanTT = nil
+    local function IsBoEUnbound(itemID,bag,slot_idx)
+        if not itemID then return false end 
+        if not boeScanTT then 
+            boeScanTT=CreateFrame("GameTooltip","AHBoEScan",UIParent,"GameTooltipTemplate") 
+        end
+        boeScanTT:SetOwner(UIParent,"ANCHOR_NONE") 
+        boeScanTT:SetHyperlink("item:"..itemID) 
+        local isBoE=false
+        for i=1,boeScanTT:NumLines() do 
+            local lt=_G[boeScanTT:GetName().."TextLeft"..i] 
+            if lt and string.find(lt:GetText() or "","Binds when equipped") then 
+                isBoE=true 
+                break 
+            end 
+        end
+        if isBoE and bag and slot_idx then
+            boeScanTT:SetOwner(UIParent,"ANCHOR_NONE") 
+            boeScanTT:SetBagItem(bag,slot_idx)
+            for i=1,boeScanTT:NumLines() do 
+                local lt=_G[boeScanTT:GetName().."TextLeft"..i] 
+                if lt and string.find(lt:GetText() or "","Soulbound") then 
+                    boeScanTT:Hide() 
+                    return false 
+                end 
+            end
+        end 
+        boeScanTT:Hide() 
+        return isBoE
+    end
+    
+    for b=0,4 do 
+        for s=1,GetContainerNumSlots(b) do 
+            if sold>=maxS then return end 
+            local link=GetContainerItemLink(b,s) 
+            local id=GetContainerItemID(b,s)
+            
+            if link and id then 
+                local n,_,q,_,_,_,_,_,_,_,sellP=GetItemInfo(link) 
+                if n then 
+                    local skip=false 
+                    
+                    -- Check if item has no sell price
+                    if sellP==nil or sellP==0 then 
+                        skip=true 
+                    end
+                    
+                    -- Check if item is in AHIgnoreList
+                    if not skip and AHIgnoreList[n] then 
+                        skip=true 
+                        print("|cffffd200[Attune Helper]|r Skipping (AHIgnore): " .. n)
+                    end
+                    
+                    -- Check if item is in AHSetList
+                    if not skip and AHSetList[n] then 
+                        skip=true 
+                        print("|cffffd200[Attune Helper]|r Skipping (AHSet): " .. n)
+                    end
+                    
+                    -- Check if item is in equipment sets
+                    if not skip and GetNumEquipmentSets then 
+                        for i=1,GetNumEquipmentSets() do 
+                            local _,_,sID=GetEquipmentSetInfo(i) 
+                            if sID then 
+                                local ids={GetEquipmentSetItemIDs(sID)}
+                                for _,idS in ipairs(ids) do 
+                                    if idS and idS~=0 and idS==id then 
+                                        skip=true 
+                                        break
+                                    end 
+                                end 
+                            end 
+                            if skip then break end
                         end 
                     end 
-                end 
-                if skip then break end
-            end 
-        end 
-        if not skip and AHSetList[n] then skip=true end 
-        
-        local isConsideredFullyAttunedForSelling = false
-        local progress = 100 -- Assume fully attuned if API not available
-        if _G.GetItemLinkAttuneProgress then 
-            progress = GetItemLinkAttuneProgress(link)
-            if type(progress) ~= "number" then progress = 100 end
-        else
-            -- Fallback if GetItemLinkAttuneProgress is not available but old GetItemAttuneProgress is
-            if _G.GetItemAttuneProgress then
-                local apiForgeTypeParam = GetApiForgeTypeForAttuneProgress(link) -- Use itemLink to get forge for 3-param API
-                progress = GetItemAttuneProgress(id, nil, apiForgeTypeParam) or 100 -- AffixID is nil as it's not parsed anymore
-                 if type(progress) ~= "number" then progress = 100 end
-            else
-                 print_debug_general("VendorAttuned: Attunement progress API (GetItemLinkAttuneProgress or GetItemAttuneProgress) missing.")
-            end
-        end
+                    
+                    if not skip then
+                        local isConsideredFullyAttunedForSelling = false
+                        local progress = 100 -- Assume fully attuned if API not available
+                        if _G.GetItemLinkAttuneProgress then 
+                            progress = GetItemLinkAttuneProgress(link)
+                            if type(progress) ~= "number" then progress = 100 end
+                        else
+                            -- Fallback if GetItemLinkAttuneProgress is not available but old GetItemAttuneProgress is
+                            if _G.GetItemAttuneProgress then
+                                local apiForgeTypeParam = ConvertForgeMapToApiParam(GetForgeLevelFromLink(link))
+                                progress = GetItemAttuneProgress(id, nil, apiForgeTypeParam) or 100
+                                if type(progress) ~= "number" then progress = 100 end
+                            else
+                                print_debug_general("VendorAttuned: Attunement progress API (GetItemLinkAttuneProgress or GetItemAttuneProgress) missing.")
+                            end
+                        end
 
-        if progress >= 100 then
-            isConsideredFullyAttunedForSelling = true
-        elseif _G.HasAttunedAnyVariantOfItem and HasAttunedAnyVariantOfItem(id) then
-            isConsideredFullyAttunedForSelling = true 
-        end
-        
-        local isBoEU=IsBoEUnbound(id,b,s) 
-        local isM=id>=MYTHIC_MIN_ITEMID 
-        local noSellBoE=(AttuneHelperDB["Do Not Sell BoE Items"]==1 and isConsideredFullyAttunedForSelling and isBoEU) 
-        local sellM=(AttuneHelperDB["Sell Attuned Mythic Gear?"]==1) 
-        local doSell=(isM and sellM) or not isM
-        if isConsideredFullyAttunedForSelling and doSell and not noSellBoE then UseContainerItem(b,s) sold=sold+1 end
-    end end
-  end end
+                        if progress >= 100 then
+                            isConsideredFullyAttunedForSelling = true
+                        elseif _G.HasAttunedAnyVariantOfItem and HasAttunedAnyVariantOfItem(id) then
+                            isConsideredFullyAttunedForSelling = true 
+                        end
+                        
+                        local isBoEU=IsBoEUnbound(id,b,s) 
+                        local isM=id>=MYTHIC_MIN_ITEMID 
+                        local noSellBoE=(AttuneHelperDB["Do Not Sell BoE Items"]==1 and isConsideredFullyAttunedForSelling and isBoEU) 
+                        local sellM=(AttuneHelperDB["Sell Attuned Mythic Gear?"]==1) 
+                        local doSell=(isM and sellM) or not isM
+                        
+                        if isConsideredFullyAttunedForSelling and doSell and not noSellBoE then 
+                            UseContainerItem(b,s) 
+                            sold=sold+1 
+                            print("|cffffd200[Attune Helper]|r Sold: " .. n)
+                        end
+                    end
+                end 
+            end
+        end 
+    end
 end)
 
 ApplyButtonTheme(AttuneHelperDB["Button Theme"])
@@ -1248,7 +1465,8 @@ end
 SLASH_ATH2H1="/ah2h" SlashCmdList["ATH2H"]=function()AttuneHelperDB["Disable Two-Handers"]=1-(AttuneHelperDB["Disable Two-Handers"]or 0) print("|cffffd200[AH]|r 2H equipping "..(AttuneHelperDB["Disable Two-Handers"]==1 and"disabled."or"enabled."))end
 SLASH_AHTOGGLE1="/ahtoggle" SlashCmdList["AHTOGGLE"]=function()AttuneHelperDB["Auto Equip Attunable After Combat"]=1-(AttuneHelperDB["Auto Equip Attunable After Combat"]or 0) print("|cffffd200[AH]|r Auto-Equip After Combat: "..(AttuneHelperDB["Auto Equip Attunable After Combat"]==1 and"|cff00ff00Enabled|r."or"|cffff0000Disabled|r.")) for _,cb in ipairs(general_option_checkboxes)do if cb.dbKey=="Auto Equip Attunable After Combat"then cb:SetChecked(AttuneHelperDB["Auto Equip Attunable After Combat"]==1) break end end end
 SLASH_AHSETLIST1="/ahsetlist" SlashCmdList["AHSETLIST"]=function()local c=0 print("|cffffd200[AH]|r AHSetList Items:") for n,s_val in pairs(AHSetList)do if s_val then print("- "..n .. " (Slot: " .. tostring(s_val) .. ")") c=c+1 end end if c==0 then print("|cffffd200[AH]|r No items in AHSetList.")end end
-local merchF=CreateFrame("Frame") merchF:RegisterEvent("MERCHANT_SHOW") merchF:RegisterEvent("MERCHANT_UPDATE") merchF:SetScript("OnEvent",function(_,e)if e=="MERCHANT_SHOW"or e=="MERCHANT_UPDATE"then for i=1,GetNumBuybackItems()do local l=GetBuybackItemLink(i) if l then local n=GetItemInfo(l) if AHIgnoreList[n]or AHSetList[n]then BuybackItem(i) print("|cffff0000[AH]|r Bought back: "..n) return end end end end end)
+-- local merchF=CreateFrame("Frame") merchF:RegisterEvent("MERCHANT_SHOW") merchF:RegisterEvent("MERCHANT_UPDATE") merchF:SetScript("OnEvent",function(_,e)if e=="MERCHANT_SHOW"or e=="MERCHANT_UPDATE"then for i=1,GetNumBuybackItems()do local l=GetBuybackItemLink(i) if l then local n=GetItemInfo(l) if AHIgnoreList[n]or AHSetList[n]then BuybackItem(i) print("|cffff0000[AH]|r Bought back: "..n) return end end end end end)
+
 AttuneHelper:RegisterEvent("ADDON_LOADED") AttuneHelper:RegisterEvent("PLAYER_REGEN_DISABLED") AttuneHelper:RegisterEvent("PLAYER_REGEN_ENABLED") AttuneHelper:RegisterEvent("PLAYER_LOGIN") AttuneHelper:RegisterEvent("BAG_UPDATE") AttuneHelper:RegisterEvent("UI_ERROR_MESSAGE")
 AttuneHelper:SetScript("OnEvent", function(s, e, a1)
     if e == "ADDON_LOADED" and a1 == "AttuneHelper" then
