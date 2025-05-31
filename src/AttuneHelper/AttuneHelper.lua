@@ -415,7 +415,59 @@ local function AH_wait(delay,func,...)
 end
 local function HideEquipPopups() StaticPopup_Hide("EQUIP_BIND") StaticPopup_Hide("AUTOEQUIP_BIND") for i=1,STATICPOPUP_NUMDIALOGS do local f=_G["StaticPopup"..i] if f and f:IsVisible() then local w=f.which if w=="EQUIP_BIND" or w=="AUTOEQUIP_BIND" then f:Hide() end end end end
 
-local AttuneHelper=CreateFrame("Frame","AttuneHelperFrame",UIParent) AttuneHelper:SetSize(185,125) AttuneHelper:SetPoint(unpack(AttuneHelperDB.FramePosition)) AttuneHelper:EnableMouse(true) AttuneHelper:SetMovable(true) AttuneHelper:RegisterForDrag("LeftButton") AttuneHelper:SetScript("OnDragStart",function(s) if s:IsMovable() then s:StartMoving() end end) AttuneHelper:SetScript("OnDragStop",function(s) s:StopMovingOrSizing() AttuneHelperDB.FramePosition={s:GetPoint()} end) AttuneHelper:SetBackdrop({bgFile=BgStyles[AttuneHelperDB["Background Style"]],edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=16,edgeSize=16,insets={left=4,right=4,top=4,bottom=4}}) AttuneHelper:SetBackdropColor(unpack(AttuneHelperDB["Background Color"])) AttuneHelper:SetBackdropBorderColor(0.4,0.4,0.4)
+local AttuneHelper = CreateFrame("Frame", "AttuneHelperFrame", UIParent)
+AttuneHelper:SetSize(185, 125)
+
+if AttuneHelperDB.FramePosition then 
+    local pos = AttuneHelperDB.FramePosition
+    -- Check if position data is valid
+    if pos and #pos >= 5 and pos[1] and pos[3] and pos[4] ~= nil and pos[5] ~= nil then
+        local success, err = pcall(function()
+            AttuneHelper:SetPoint(pos[1], UIParent, pos[3], pos[4], pos[5])
+        end)
+        if not success then
+            print_debug_general("Failed to restore frame position, using default: " .. tostring(err))
+            AttuneHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+            AttuneHelperDB.FramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+        end
+    else
+        AttuneHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+        AttuneHelperDB.FramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+    end
+else
+    AttuneHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    AttuneHelperDB.FramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+end
+
+AttuneHelper:EnableMouse(true)
+AttuneHelper:SetMovable(true)
+AttuneHelper:RegisterForDrag("LeftButton")
+
+AttuneHelper:SetScript("OnDragStart", function(s) 
+    if s:IsMovable() then 
+        s:StartMoving() 
+    end 
+end)
+
+AttuneHelper:SetScript("OnDragStop", function(s) 
+    s:StopMovingOrSizing() 
+    local point, relativeTo, relativePoint, xOfs, yOfs = s:GetPoint()
+    -- Always save with UIParent as the relative frame for consistency
+    AttuneHelperDB.FramePosition = {point, UIParent, relativePoint, xOfs, yOfs}
+end)
+
+AttuneHelper:SetBackdrop({
+    bgFile = BgStyles[AttuneHelperDB["Background Style"]],
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true,
+    tileSize = 16,
+    edgeSize = 16,
+    insets = {left = 4, right = 4, top = 4, bottom = 4}
+})
+
+AttuneHelper:SetBackdropColor(unpack(AttuneHelperDB["Background Color"]))
+AttuneHelper:SetBackdropBorderColor(0.4, 0.4, 0.4)
+
 local AttuneHelper_UpdateDisplayMode
 local function SaveAllSettings() if not InterfaceOptionsFrame or not InterfaceOptionsFrame:IsShown() then return end for _,cb in ipairs(blacklist_checkboxes) do if cb and cb:IsShown() then AttuneHelperDB[cb:GetName():gsub("AttuneHelperBlacklist_",""):gsub("Checkbox","")]=cb:GetChecked() and 1 or 0 end end for _,cb in ipairs(general_option_checkboxes) do if cb and cb:IsShown() then AttuneHelperDB[cb.dbKey or cb:GetName()]=cb:GetChecked() and 1 or 0 end end if type(AttuneHelperDB.AllowedForgeTypes)~="table" then AttuneHelperDB.AllowedForgeTypes={} end for _,cb in ipairs(forge_type_checkboxes) do if cb and cb:IsShown() and cb.dbKey then if cb:GetChecked() then AttuneHelperDB.AllowedForgeTypes[cb.dbKey]=true else AttuneHelperDB.AllowedForgeTypes[cb.dbKey]=nil end end end
 end
@@ -424,30 +476,39 @@ local function LoadAllSettings()
     InitializeDefaultSettings() 
     
     if AttuneHelperDB.FramePosition then 
-        AttuneHelper:SetPoint(unpack(AttuneHelperDB.FramePosition)) 
+        local pos = AttuneHelperDB.FramePosition
+        if pos and #pos >= 5 and pos[1] and pos[3] and pos[4] ~= nil and pos[5] ~= nil then
+            local success, err = pcall(function()
+                AttuneHelper:SetPoint(pos[1], UIParent, pos[3], pos[4], pos[5])
+            end)
+            if not success then
+                print_debug_general("Failed to restore frame position, using default: " .. tostring(err))
+                AttuneHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+                AttuneHelperDB.FramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+            end
+        else
+            AttuneHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+            AttuneHelperDB.FramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+        end
     end 
     
-    -- Fix for MiniFrame positioning with better validation
     if AttuneHelperMiniFrame and AttuneHelperDB.MiniFramePosition then 
         local pos = AttuneHelperDB.MiniFramePosition
-        -- Check if position data is valid and parent frame exists
         if pos and #pos >= 5 and pos[1] and pos[3] and pos[4] ~= nil and pos[5] ~= nil then
-            -- Validate that pos[2] is a valid frame reference
-            if pos[2] == UIParent or (type(pos[2]) == "table" and pos[2].GetObjectType) then
-                AttuneHelperMiniFrame:SetPoint(unpack(pos))
-            else
-                -- Reset to default if parent frame is invalid
+            local success, err = pcall(function()
+                AttuneHelperMiniFrame:SetPoint(pos[1], UIParent, pos[3], pos[4], pos[5])
+            end)
+            if not success then
+                print_debug_general("Failed to restore mini frame position, using default: " .. tostring(err))
                 AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
                 AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
             end
         else
-            -- Reset to default if position data is invalid
             AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
             AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
         end
-    end 
-    
-    -- Rest of the function remains the same...
+    end
+
     if type(AttuneHelperDB.AllowedForgeTypes)~="table" then 
         AttuneHelperDB.AllowedForgeTypes={} 
         for k,v in pairs(defaultForgeKeysAndValues) do 
@@ -1323,8 +1384,72 @@ local function CreateMiniIconButton(name,parent,iconPath,size,tooltipText)
     return btn
   end
 
-AttuneHelperMiniFrame=CreateFrame("Frame","AttuneHelperMiniFrame",UIParent) AttuneHelperMiniFrame:SetSize(88,32) AttuneHelperMiniFrame:SetPoint(unpack(AttuneHelperDB.MiniFramePosition)) AttuneHelperMiniFrame:EnableMouse(true) AttuneHelperMiniFrame:SetMovable(true) AttuneHelperMiniFrame:RegisterForDrag("LeftButton") AttuneHelperMiniFrame:SetScript("OnDragStart",function(s)if s:IsMovable()then s:StartMoving()end end) AttuneHelperMiniFrame:SetScript("OnDragStop",function(s)s:StopMovingOrSizing() AttuneHelperDB.MiniFramePosition={s:GetPoint()}end) AttuneHelperMiniFrame:SetBackdrop({bgFile=BgStyles.MiniModeBg,edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=8,edgeSize=16,insets={left=1,right=1,top=1,bottom=1}}) AttuneHelperMiniFrame:SetBackdropColor(AttuneHelperDB["Background Color"][1],AttuneHelperDB["Background Color"][2],AttuneHelperDB["Background Color"][3],AttuneHelperDB["Background Color"][4]) AttuneHelperMiniFrame:SetBackdropBorderColor(0.3,0.3,0.3,0.8) AttuneHelperMiniFrame:Hide()
-local mBS = 24 local mS = 4 local fP = (AttuneHelperMiniFrame:GetHeight() - mBS) / 2
+  AttuneHelperMiniFrame = CreateFrame("Frame", "AttuneHelperMiniFrame", UIParent)
+  AttuneHelperMiniFrame:SetSize(88, 32)
+  
+  -- Safe positioning with validation for mini frame
+  if AttuneHelperDB.MiniFramePosition then 
+      local pos = AttuneHelperDB.MiniFramePosition
+      -- Check if position data is valid
+      if pos and #pos >= 5 and pos[1] and pos[3] and pos[4] ~= nil and pos[5] ~= nil then
+          -- Use pcall to safely attempt positioning
+          local success, err = pcall(function()
+              AttuneHelperMiniFrame:SetPoint(pos[1], UIParent, pos[3], pos[4], pos[5])
+          end)
+          if not success then
+              print_debug_general("Failed to restore mini frame position, using default: " .. tostring(err))
+              AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+              AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+          end
+      else
+          -- Reset to default if position data is invalid
+          AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+          AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+      end
+  else
+      -- No saved position, use default
+      AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+      AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+  end
+  
+  AttuneHelperMiniFrame:EnableMouse(true)
+  AttuneHelperMiniFrame:SetMovable(true)
+  AttuneHelperMiniFrame:RegisterForDrag("LeftButton")
+  
+  AttuneHelperMiniFrame:SetScript("OnDragStart", function(s)
+      if s:IsMovable() then 
+          s:StartMoving()
+      end 
+  end)
+  
+  -- Fixed drag stop handler for mini frame
+  AttuneHelperMiniFrame:SetScript("OnDragStop", function(s)
+      s:StopMovingOrSizing() 
+      local point, relativeTo, relativePoint, xOfs, yOfs = s:GetPoint()
+      -- Always save with UIParent as the relative frame for consistency
+      AttuneHelperDB.MiniFramePosition = {point, UIParent, relativePoint, xOfs, yOfs}
+  end)
+  
+  AttuneHelperMiniFrame:SetBackdrop({
+      bgFile = BgStyles.MiniModeBg,
+      edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+      tile = true,
+      tileSize = 8,
+      edgeSize = 16,
+      insets = {left = 1, right = 1, top = 1, bottom = 1}
+  })
+  
+  AttuneHelperMiniFrame:SetBackdropColor(
+      AttuneHelperDB["Background Color"][1],
+      AttuneHelperDB["Background Color"][2],
+      AttuneHelperDB["Background Color"][3],
+      AttuneHelperDB["Background Color"][4]
+  )
+  
+  AttuneHelperMiniFrame:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
+  AttuneHelperMiniFrame:Hide()
+  
+  local mBS = 24 local mS = 4 local fP = (AttuneHelperMiniFrame:GetHeight() - mBS) / 2
 AttuneHelperMiniEquipButton = CreateMiniIconButton(
     "AttuneHelperMiniEquipButton",
     AttuneHelperMiniFrame,
@@ -1553,7 +1678,15 @@ end
 
 SLASH_ATTUNEHELPER1="/ath" SlashCmdList["ATTUNEHELPER"]=function(msg)
     local cmd = msg:lower():match("^(%S*)")
-    if cmd=="reset"then AttuneHelper:ClearAllPoints() AttuneHelper:SetPoint("CENTER") AttuneHelperDB.FramePosition={"CENTER",UIParent,"CENTER",0,0} if AttuneHelperMiniFrame then AttuneHelperMiniFrame:ClearAllPoints() AttuneHelperMiniFrame:SetPoint("CENTER") AttuneHelperDB.MiniFramePosition={"CENTER",UIParent,"CENTER",0,0}end print("ATH: UI reset.")
+    if cmd=="reset"then 
+        AttuneHelper:ClearAllPoints() 
+        AttuneHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0) 
+        AttuneHelperDB.FramePosition={"CENTER", UIParent, "CENTER", 0, 0} 
+        if AttuneHelperMiniFrame then 
+            AttuneHelperMiniFrame:ClearAllPoints() 
+            AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+            AttuneHelperDB.MiniFramePosition={"CENTER", UIParent, "CENTER", 0, 0}
+        end
     elseif cmd=="show"then if AttuneHelperDB["Mini Mode"]==1 and AttuneHelperMiniFrame then AttuneHelperMiniFrame:Show()else AttuneHelper:Show()end
     elseif cmd=="hide"then if AttuneHelperDB["Mini Mode"]==1 and AttuneHelperMiniFrame then AttuneHelperMiniFrame:Hide()else AttuneHelper:Hide()end
     elseif cmd=="sort"then local fn=SortInventoryButton and SortInventoryButton:GetScript("OnClick") if fn then fn()end
@@ -1740,27 +1873,6 @@ AttuneHelper:SetScript("OnEvent", function(s, e, a1)
     if e == "PLAYER_LOGIN" then
         s:UnregisterEvent("PLAYER_LOGIN")
         AH_wait(1, function()
-            if AttuneHelperMiniFrame and AttuneHelperDB.MiniFramePosition then
-                local pos = AttuneHelperDB.MiniFramePosition
-                -- Check if position data is valid and parent frame exists
-                if pos and #pos >= 5 and pos[1] and pos[3] and pos[4] ~= nil and pos[5] ~= nil then
-                    -- Validate that pos[2] is a valid frame reference
-                    if pos[2] == UIParent or (type(pos[2]) == "table" and pos[2].GetObjectType) then
-                        AttuneHelperMiniFrame:SetPoint(unpack(pos))
-                    else
-                        -- Reset to default if parent frame is invalid
-                        AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-                        AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
-                    end
-                else
-                    -- Reset to default if position data is invalid
-                    AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-                    AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
-                end
-            end
-            if AttuneHelperDB.FramePosition then
-                AttuneHelper:SetPoint(unpack(AttuneHelperDB.FramePosition))
-            end
             LoadAllSettings()
         end)
         AH_wait(3, function()

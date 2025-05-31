@@ -2,7 +2,7 @@
 ## Title: AttuneHelper
 ## Notes: Automatically Swaps Gear To Streamline Attunement
 ## Author: Multiple People
-## Version: 1.3.1-Release
+## Version: 1.3.3-Release
 ## SavedVariables: AttuneHelperDB, AHIgnoreList
 ## SavedVariablesPerCharacter: AHSetList
 AttuneHelper.lua
