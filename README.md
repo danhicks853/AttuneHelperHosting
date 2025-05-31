@@ -79,6 +79,3 @@ AttuneHelper also provides a graphical configuration panel within the game's Int
 
 Changes made in the options panel are saved automatically.
 
-## Dependencies
-
-- [SynastriaCoreLib](https://github.com/imevul/SynastriaCoreLib/releases) (Optional)
