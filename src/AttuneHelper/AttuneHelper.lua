@@ -5,6 +5,8 @@ AttuneHelperDB = AttuneHelperDB or {}
 -- ****** DEBUGGING TOGGLE ******
 local GENERAL_DEBUG_MODE = false -- Set to true for original broad debug messages
 local AHSET_DEBUG_MODE = false   -- Set to true for focused AHSet debugging
+local VENDOR_PREVIEW_DEBUG_MODE = false -- Set to true for vendor preview/confirmation debugging
+
 local function print_debug_general(msg)
     if GENERAL_DEBUG_MODE then
         DEFAULT_CHAT_FRAME:AddMessage("|cffFFD700[AH_DEBUG_GEN]|r " .. tostring(msg))
@@ -18,6 +20,11 @@ end
 local function print_debug_ahset(slotName, msg)
     if AHSET_DEBUG_MODE then
         DEFAULT_CHAT_FRAME:AddMessage("|cffFF8C00[AHSET_DEBUG]|cffFFD700["..tostring(slotName).."]|r " .. tostring(msg))
+    end
+end
+local function print_debug_vendor_preview(msg)
+    if VENDOR_PREVIEW_DEBUG_MODE then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff33CCFF[AH_VENDOR_CONFIRM]|r " .. tostring(msg))
     end
 end
 -- *****************************
@@ -128,24 +135,24 @@ local function ItemIsActivelyLeveling(itemId, itemLink)
         print_debug_general("ItemIsActivelyLeveling: itemLink is required. ItemId: " .. tostring(itemId))
         return false
     end
-    if not itemId then itemId = GetItemIDFromLink(itemLink) end 
-    if not itemId then return false end 
+    if not itemId then itemId = GetItemIDFromLink(itemLink) end
+    if not itemId then return false end
 
     if not _G.CanAttuneItemHelper or CanAttuneItemHelper(itemId) ~= 1 then
-        return false 
+        return false
     end
 
     if not _G.GetItemLinkAttuneProgress then
         print_debug_general("ItemIsActivelyLeveling: GetItemLinkAttuneProgress API missing for itemLink " .. itemLink)
-        return false 
+        return false
     end
-    
+
     -- CRITICAL: Use the itemLink to check THIS SPECIFIC VARIANT's progress
     local progress = GetItemLinkAttuneProgress(itemLink)
 
     if type(progress) ~= "number" then
         print_debug_general("ItemIsActivelyLeveling: GetItemLinkAttuneProgress did not return a number for itemLink "..itemLink..". Got: " .. tostring(progress) .. ". Assuming fully attuned.")
-        return false 
+        return false
     end
 
     print_debug_general("ItemIsActivelyLeveling check for itemLink ".. itemLink .. ": Progress="..progress)
@@ -154,9 +161,9 @@ end
 
 -- Helper: Check if a bag item qualifies for equipping based on attunement needs and "EquipNewAffixesOnly" setting
 local function ItemQualifiesForBagEquip(itemId, itemLink, isEquipNewAffixesOnlyEnabled)
-    if not itemLink then 
+    if not itemLink then
         print_debug_general("ItemQualifiesForBagEquip: itemLink is required. ItemId: " .. tostring(itemId))
-        return false 
+        return false
     end
     if not itemId then itemId = GetItemIDFromLink(itemLink) end
     if not itemId then return false end
@@ -166,40 +173,40 @@ local function ItemQualifiesForBagEquip(itemId, itemLink, isEquipNewAffixesOnlyE
         canPlayerAttuneThisItem = (_G.CanAttuneItemHelper(itemId) == 1)
     else
         print_debug_general("ItemQualifiesForBagEquip: CanAttuneItemHelper API not found for itemId " .. itemId)
-        return false 
+        return false
     end
 
     if not canPlayerAttuneThisItem then
-        return false 
+        return false
     end
 
     -- CRITICAL: Use the itemLink to check THIS SPECIFIC VARIANT's progress
     local progress
-    if _G.GetItemLinkAttuneProgress then 
-        progress = GetItemLinkAttuneProgress(itemLink) 
+    if _G.GetItemLinkAttuneProgress then
+        progress = GetItemLinkAttuneProgress(itemLink)
         if type(progress) ~= "number" then
             print_debug_general("ItemQualifiesForBagEquip: GetItemLinkAttuneProgress did not return a number for itemLink "..itemLink..". Got: " .. tostring(progress))
-            progress = 100 
+            progress = 100
         end
     else
         print_debug_general("ItemQualifiesForBagEquip: GetItemLinkAttuneProgress API not found for itemLink " .. itemLink)
-        return false 
+        return false
     end
 
     print_debug_general("ItemQualifiesForBagEquip check for itemLink ".. itemLink .. ": Progress="..progress..", EquipNewAffixesOnly="..tostring(isEquipNewAffixesOnlyEnabled))
 
     if progress >= 100 then
         print_debug_general("  This specific variant already 100% attuned. Does not qualify.")
-        return false 
+        return false
     end
 
     -- Get forge level of this specific variant
     local currentForgeLevel = GetForgeLevelFromLink(itemLink)
-    
-    if isEquipNewAffixesOnlyEnabled then 
-        local hasAnyVariantBeenAttuned = true 
+
+    if isEquipNewAffixesOnlyEnabled then
+        local hasAnyVariantBeenAttuned = true
         if _G.HasAttunedAnyVariantOfItem then
-            hasAnyVariantBeenAttuned = HasAttunedAnyVariantOfItem(itemId) 
+            hasAnyVariantBeenAttuned = HasAttunedAnyVariantOfItem(itemId)
         else
             print_debug_general("ItemQualifiesForBagEquip: HasAttunedAnyVariantOfItem API not found for itemId " .. itemId)
         end
@@ -217,7 +224,7 @@ local function ItemQualifiesForBagEquip(itemId, itemLink, isEquipNewAffixesOnlyE
                 return false
             end
         end
-    else 
+    else
         print_debug_general("  Lenient Mode ('EquipNewAffixesOnly' OFF): Qualifies because this specific variant progress < 100%.")
         return true
     end
@@ -227,27 +234,27 @@ end
 -- Returns true if item1 should be prioritized over item2
 local function ShouldPrioritizeItem(item1Link, item2Link)
     if not item1Link or not item2Link then return false end
-    
+
     -- Get forge levels
     local forge1 = GetForgeLevelFromLink(item1Link)
     local forge2 = GetForgeLevelFromLink(item2Link)
-    
+
     -- Higher forge level wins
     if forge1 ~= forge2 then
         return forge1 > forge2
     end
-    
+
     -- If same forge level, check progress (lower progress = more room to grow)
     local progress1 = 0
     local progress2 = 0
-    
+
     if _G.GetItemLinkAttuneProgress then
         progress1 = GetItemLinkAttuneProgress(item1Link) or 0
         progress2 = GetItemLinkAttuneProgress(item2Link) or 0
         if type(progress1) ~= "number" then progress1 = 0 end
         if type(progress2) ~= "number" then progress2 = 0 end
     end
-    
+
     -- Lower progress wins (more room to attune)
     return progress1 < progress2
 end
@@ -256,11 +263,11 @@ end
 local function UpdateItemCountText()
   local c = 0
   if synEXTloaded then
-      local isStrictEquip = (AttuneHelperDB["EquipNewAffixesOnly"] == 1) 
+      local isStrictEquip = (AttuneHelperDB["EquipNewAffixesOnly"] == 1)
       for _, bagTbl in pairs(bagSlotCache) do
           if bagTbl then
               for _, rec in pairs(bagTbl) do
-                  if rec and rec.isAttunable then 
+                  if rec and rec.isAttunable then
                       local itemId = GetItemIDFromLink(rec.link)
                       if itemId then
                           if ItemQualifiesForBagEquip(itemId, rec.link, isStrictEquip) then
@@ -316,15 +323,22 @@ local function InitializeDefaultSettings()
     if AttuneHelperDB["FramePosition"] == nil then AttuneHelperDB["FramePosition"] = { "CENTER", UIParent, "CENTER", 0, 0 } end
     if AttuneHelperDB["MiniFramePosition"] == nil then AttuneHelperDB["MiniFramePosition"] = { "CENTER", UIParent, "CENTER", 0, 0 } end
     if AttuneHelperDB["Disable Two-Handers"] == nil then AttuneHelperDB["Disable Two-Handers"] = 0 end
-    
+
     if AttuneHelperDB["EquipUntouchedVariants"] ~= nil and AttuneHelperDB["EquipNewAffixesOnly"] == nil then
         AttuneHelperDB["EquipNewAffixesOnly"] = AttuneHelperDB["EquipUntouchedVariants"]
         print_debug_general("AttuneHelper: Migrated old setting 'EquipUntouchedVariants' to 'EquipNewAffixesOnly'.")
     end
-    AttuneHelperDB["EquipUntouchedVariants"] = nil 
+    AttuneHelperDB["EquipUntouchedVariants"] = nil
 
-    if AttuneHelperDB["EquipNewAffixesOnly"] == nil then AttuneHelperDB["EquipNewAffixesOnly"] = 0 end 
-    
+    if AttuneHelperDB["EquipNewAffixesOnly"] == nil then AttuneHelperDB["EquipNewAffixesOnly"] = 0 end
+
+    -- Handle renaming of EnableVendorPreview to EnableVendorSellConfirmationDialog
+    if AttuneHelperDB["EnableVendorPreview"] ~= nil and AttuneHelperDB["EnableVendorSellConfirmationDialog"] == nil then
+        AttuneHelperDB["EnableVendorSellConfirmationDialog"] = AttuneHelperDB["EnableVendorPreview"]
+        print_debug_general("AttuneHelper: Migrated old setting 'EnableVendorPreview' to 'EnableVendorSellConfirmationDialog'.")
+    end
+    AttuneHelperDB["EnableVendorPreview"] = nil -- Remove old key
+
     if type(AttuneHelperDB.AllowedForgeTypes) ~= "table" then
         AttuneHelperDB.AllowedForgeTypes = {}
         for keyName, defaultValue in pairs(defaultForgeKeysAndValues) do AttuneHelperDB.AllowedForgeTypes[keyName] = defaultValue end
@@ -332,7 +346,8 @@ local function InitializeDefaultSettings()
     local generalOptionDefaults = {
         ["Sell Attuned Mythic Gear?"] = 0, ["Auto Equip Attunable After Combat"] = 0, ["Do Not Sell BoE Items"] = 0,
         ["Limit Selling to 12 Items?"] = 0, ["Disable Auto-Equip Mythic BoE"] = 1, ["Equip BoE Bountied Items"] = 0,
-        ["Mini Mode"] = 0, ["EquipNewAffixesOnly"] = 0 
+        ["Mini Mode"] = 0, ["EquipNewAffixesOnly"] = 0,
+        ["EnableVendorSellConfirmationDialog"] = 1 -- New name, default to enabled
     }
     for optName, defValue in pairs(generalOptionDefaults) do
         if AttuneHelperDB[optName] == nil then AttuneHelperDB[optName] = defValue end
@@ -364,11 +379,11 @@ local function UpdateBagCache(bagID)
           local itemID=GetItemIDFromLink(link)
           local canPlayerAttune = false
           if itemID then
-            if _G.CanAttuneItemHelper then
-                local attuneHelperResult = CanAttuneItemHelper(itemID)
-                print_debug_general("UpdateBagCache: Item ".. (name or link) .. " ID:"..itemID.." CanAttuneItemHelper result: " .. tostring(attuneHelperResult))
-                canPlayerAttune = (attuneHelperResult == 1)
-            end
+              if _G.CanAttuneItemHelper then
+                  local attuneHelperResult = CanAttuneItemHelper(itemID)
+                  print_debug_general("UpdateBagCache: Item ".. (name or link) .. " ID:"..itemID.." CanAttuneItemHelper result: " .. tostring(attuneHelperResult))
+                  canPlayerAttune = (attuneHelperResult == 1)
+              end
           end
           local inSet=(AHSetList[name] ~= nil)
           if canPlayerAttune or inSet then local rec={bag=bagID,slot=slotID,link=link,name=name,equipSlot=eSlot_raw,isAttunable=canPlayerAttune,inSet=inSet} bagSlotCache[bagID][slotID]=rec
@@ -389,22 +404,22 @@ local function AH_wait(delay,func,...)
     waitFrame:SetScript("OnUpdate",function(s,e)
       local i=1
       while i<=#waitTable do
-        local rec_data = table.remove(waitTable,i) 
+        local rec_data = table.remove(waitTable,i)
         if rec_data then
             local d = rec_data[1]
             local f = rec_data[2]
             local p = rec_data[3]
             if d and type(d) == "number" and f and type(f) == "function" and p and type(p) == "table" and d > e then
-                table.insert(waitTable,i,{d-e,f,p}) 
+                table.insert(waitTable,i,{d-e,f,p})
                 i=i+1
             elseif f and type(f) == "function" then
-                f(unpack(p or {})) 
+                f(unpack(p or {}))
             else
-                 print_debug_general("AH_wait: Invalid record content (d, f, or p is nil/wrong type) from waitTable.")
+                print_debug_general("AH_wait: Invalid record content (d, f, or p is nil/wrong type) from waitTable.")
             end
         else
             print_debug_general("AH_wait: table.remove returned nil from waitTable. Current table size: " .. #waitTable .. ". Index i: " .. i)
-            if #waitTable == 0 and i == 1 then break end 
+            if #waitTable == 0 and i == 1 then break end
             if i > #waitTable + 1 then print_debug_general("AH_wait: Breaking to prevent potential infinite loop with nil returns.") break end
         end
       end
@@ -415,60 +430,121 @@ local function AH_wait(delay,func,...)
 end
 local function HideEquipPopups() StaticPopup_Hide("EQUIP_BIND") StaticPopup_Hide("AUTOEQUIP_BIND") for i=1,STATICPOPUP_NUMDIALOGS do local f=_G["StaticPopup"..i] if f and f:IsVisible() then local w=f.which if w=="EQUIP_BIND" or w=="AUTOEQUIP_BIND" then f:Hide() end end end end
 
-local AttuneHelper=CreateFrame("Frame","AttuneHelperFrame",UIParent) AttuneHelper:SetSize(185,125) AttuneHelper:SetPoint(unpack(AttuneHelperDB.FramePosition)) AttuneHelper:EnableMouse(true) AttuneHelper:SetMovable(true) AttuneHelper:RegisterForDrag("LeftButton") AttuneHelper:SetScript("OnDragStart",function(s) if s:IsMovable() then s:StartMoving() end end) AttuneHelper:SetScript("OnDragStop",function(s) s:StopMovingOrSizing() AttuneHelperDB.FramePosition={s:GetPoint()} end) AttuneHelper:SetBackdrop({bgFile=BgStyles[AttuneHelperDB["Background Style"]],edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=16,edgeSize=16,insets={left=4,right=4,top=4,bottom=4}}) AttuneHelper:SetBackdropColor(unpack(AttuneHelperDB["Background Color"])) AttuneHelper:SetBackdropBorderColor(0.4,0.4,0.4)
+local AttuneHelper = CreateFrame("Frame", "AttuneHelperFrame", UIParent)
+AttuneHelper:SetSize(185, 125)
+
+if AttuneHelperDB.FramePosition then
+    local pos = AttuneHelperDB.FramePosition
+    -- Check if position data is valid
+    if pos and #pos >= 5 and pos[1] and pos[3] and pos[4] ~= nil and pos[5] ~= nil then
+        local success, err = pcall(function()
+            AttuneHelper:SetPoint(pos[1], UIParent, pos[3], pos[4], pos[5])
+        end)
+        if not success then
+            print_debug_general("Failed to restore frame position, using default: " .. tostring(err))
+            AttuneHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+            AttuneHelperDB.FramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+        end
+    else
+        AttuneHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+        AttuneHelperDB.FramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+    end
+else
+    AttuneHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    AttuneHelperDB.FramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+end
+
+AttuneHelper:EnableMouse(true)
+AttuneHelper:SetMovable(true)
+AttuneHelper:RegisterForDrag("LeftButton")
+
+AttuneHelper:SetScript("OnDragStart", function(s)
+    if s:IsMovable() then
+        s:StartMoving()
+    end
+end)
+
+AttuneHelper:SetScript("OnDragStop", function(s)
+    s:StopMovingOrSizing()
+    local point, relativeTo, relativePoint, xOfs, yOfs = s:GetPoint()
+    -- Always save with UIParent as the relative frame for consistency
+    AttuneHelperDB.FramePosition = {point, UIParent, relativePoint, xOfs, yOfs}
+end)
+
+AttuneHelper:SetBackdrop({
+    bgFile = BgStyles[AttuneHelperDB["Background Style"]],
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true,
+    tileSize = 16,
+    edgeSize = 16,
+    insets = {left = 4, right = 4, top = 4, bottom = 4}
+})
+
+AttuneHelper:SetBackdropColor(unpack(AttuneHelperDB["Background Color"]))
+AttuneHelper:SetBackdropBorderColor(0.4, 0.4, 0.4)
+
 local AttuneHelper_UpdateDisplayMode
 local function SaveAllSettings() if not InterfaceOptionsFrame or not InterfaceOptionsFrame:IsShown() then return end for _,cb in ipairs(blacklist_checkboxes) do if cb and cb:IsShown() then AttuneHelperDB[cb:GetName():gsub("AttuneHelperBlacklist_",""):gsub("Checkbox","")]=cb:GetChecked() and 1 or 0 end end for _,cb in ipairs(general_option_checkboxes) do if cb and cb:IsShown() then AttuneHelperDB[cb.dbKey or cb:GetName()]=cb:GetChecked() and 1 or 0 end end if type(AttuneHelperDB.AllowedForgeTypes)~="table" then AttuneHelperDB.AllowedForgeTypes={} end for _,cb in ipairs(forge_type_checkboxes) do if cb and cb:IsShown() and cb.dbKey then if cb:GetChecked() then AttuneHelperDB.AllowedForgeTypes[cb.dbKey]=true else AttuneHelperDB.AllowedForgeTypes[cb.dbKey]=nil end end end
 end
 
-local function LoadAllSettings() 
-    InitializeDefaultSettings() 
-    
-    if AttuneHelperDB.FramePosition then 
-        AttuneHelper:SetPoint(unpack(AttuneHelperDB.FramePosition)) 
-    end 
-    
-    -- Fix for MiniFrame positioning with better validation
-    if AttuneHelperMiniFrame and AttuneHelperDB.MiniFramePosition then 
-        local pos = AttuneHelperDB.MiniFramePosition
-        -- Check if position data is valid and parent frame exists
+local function LoadAllSettings()
+    InitializeDefaultSettings()
+
+    if AttuneHelperDB.FramePosition then
+        local pos = AttuneHelperDB.FramePosition
         if pos and #pos >= 5 and pos[1] and pos[3] and pos[4] ~= nil and pos[5] ~= nil then
-            -- Validate that pos[2] is a valid frame reference
-            if pos[2] == UIParent or (type(pos[2]) == "table" and pos[2].GetObjectType) then
-                AttuneHelperMiniFrame:SetPoint(unpack(pos))
-            else
-                -- Reset to default if parent frame is invalid
+            local success, err = pcall(function()
+                AttuneHelper:SetPoint(pos[1], UIParent, pos[3], pos[4], pos[5])
+            end)
+            if not success then
+                print_debug_general("Failed to restore frame position, using default: " .. tostring(err))
+                AttuneHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+                AttuneHelperDB.FramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+            end
+        else
+            AttuneHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+            AttuneHelperDB.FramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+        end
+    end
+
+    if AttuneHelperMiniFrame and AttuneHelperDB.MiniFramePosition then
+        local pos = AttuneHelperDB.MiniFramePosition
+        if pos and #pos >= 5 and pos[1] and pos[3] and pos[4] ~= nil and pos[5] ~= nil then
+            local success, err = pcall(function()
+                AttuneHelperMiniFrame:SetPoint(pos[1], UIParent, pos[3], pos[4], pos[5])
+            end)
+            if not success then
+                print_debug_general("Failed to restore mini frame position, using default: " .. tostring(err))
                 AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
                 AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
             end
         else
-            -- Reset to default if position data is invalid
             AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
             AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
         end
-    end 
-    
-    -- Rest of the function remains the same...
-    if type(AttuneHelperDB.AllowedForgeTypes)~="table" then 
-        AttuneHelperDB.AllowedForgeTypes={} 
-        for k,v in pairs(defaultForgeKeysAndValues) do 
-            AttuneHelperDB.AllowedForgeTypes[k]=v 
-        end 
-    end 
-    
-    for _,cbW in ipairs(forge_type_checkboxes) do 
-        if cbW and cbW.dbKey then 
-            cbW:SetChecked(AttuneHelperDB.AllowedForgeTypes[cbW.dbKey]==true) 
-        end 
     end
-    
-    local ddBgStyle=_G["AttuneHelperBgDropdown"] 
-    if ddBgStyle then 
-        UIDropDownMenu_SetSelectedValue(ddBgStyle, AttuneHelperDB["Background Style"]) 
-        UIDropDownMenu_SetText(ddBgStyle, AttuneHelperDB["Background Style"]) 
+
+    if type(AttuneHelperDB.AllowedForgeTypes)~="table" then
+        AttuneHelperDB.AllowedForgeTypes={}
+        for k,v in pairs(defaultForgeKeysAndValues) do
+            AttuneHelperDB.AllowedForgeTypes[k]=v
+        end
     end
-    
-    if BgStyles[AttuneHelperDB["Background Style"]] then 
-        local cs,nt=AttuneHelperDB["Background Style"],(cs=="Atunament" or cs=="Always Bee Attunin'") 
+
+    for _,cbW in ipairs(forge_type_checkboxes) do
+        if cbW and cbW.dbKey then
+            cbW:SetChecked(AttuneHelperDB.AllowedForgeTypes[cbW.dbKey]==true)
+        end
+    end
+
+    local ddBgStyle=_G["AttuneHelperBgDropdown"]
+    if ddBgStyle then
+        UIDropDownMenu_SetSelectedValue(ddBgStyle, AttuneHelperDB["Background Style"])
+        UIDropDownMenu_SetText(ddBgStyle, AttuneHelperDB["Background Style"])
+    end
+
+    if BgStyles[AttuneHelperDB["Background Style"]] then
+        local cs,nt=AttuneHelperDB["Background Style"],(cs=="Atunament" or cs=="Always Bee Attunin'")
         AttuneHelper:SetBackdrop{
             bgFile=BgStyles[cs],
             edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",
@@ -476,48 +552,48 @@ local function LoadAllSettings()
             tileSize=(nt and 0 or 16),
             edgeSize=16,
             insets={left=4,right=4,top=4,bottom=4}
-        } 
-        AttuneHelper:SetBackdropColor(unpack(AttuneHelperDB["Background Color"])) 
+        }
+        AttuneHelper:SetBackdropColor(unpack(AttuneHelperDB["Background Color"]))
     end
-    
-    if AttuneHelperMiniFrame then 
+
+    if AttuneHelperMiniFrame then
         AttuneHelperMiniFrame:SetBackdropColor(
             AttuneHelperDB["Background Color"][1],
             AttuneHelperDB["Background Color"][2],
             AttuneHelperDB["Background Color"][3],
             AttuneHelperDB["Background Color"][4]
-        ) 
+        )
     end
-    
-    local th=AttuneHelperDB["Button Theme"] or "Normal" 
-    local ddBtnTheme=_G["AttuneHelperButtonThemeDropdown"] 
-    if ddBtnTheme then 
-        UIDropDownMenu_SetSelectedValue(ddBtnTheme,th) 
-        UIDropDownMenu_SetText(ddBtnTheme,th) 
-    end 
+
+    local th=AttuneHelperDB["Button Theme"] or "Normal"
+    local ddBtnTheme=_G["AttuneHelperButtonThemeDropdown"]
+    if ddBtnTheme then
+        UIDropDownMenu_SetSelectedValue(ddBtnTheme,th)
+        UIDropDownMenu_SetText(ddBtnTheme,th)
+    end
     ApplyButtonTheme(th)
-    
-    local bgcT=AttuneHelperDB["Background Color"] 
-    local csf=_G["AttuneHelperBgColorSwatch"] 
-    if csf then 
-        csf:SetBackdropColor(bgcT[1],bgcT[2],bgcT[3],1) 
+
+    local bgcT=AttuneHelperDB["Background Color"]
+    local csf=_G["AttuneHelperBgColorSwatch"]
+    if csf then
+        csf:SetBackdropColor(bgcT[1],bgcT[2],bgcT[3],1)
     end
-    
-    local asf=_G["AttuneHelperAlphaSlider"] 
-    if asf then 
-        asf:SetValue(bgcT[4]) 
+
+    local asf=_G["AttuneHelperAlphaSlider"]
+    if asf then
+        asf:SetValue(bgcT[4])
     end
-    
-    for _,cb in ipairs(blacklist_checkboxes) do 
-        cb:SetChecked(AttuneHelperDB[cb:GetName():gsub("AttuneHelperBlacklist_",""):gsub("Checkbox","")]==1) 
+
+    for _,cb in ipairs(blacklist_checkboxes) do
+        cb:SetChecked(AttuneHelperDB[cb:GetName():gsub("AttuneHelperBlacklist_",""):gsub("Checkbox","")]==1)
     end
-    
-    for _,cb in ipairs(general_option_checkboxes) do 
-        cb:SetChecked(AttuneHelperDB[cb.dbKey or cb:GetName()]==1) 
-    end 
-    
-    if AttuneHelper_UpdateDisplayMode then 
-        AttuneHelper_UpdateDisplayMode() 
+
+    for _,cb in ipairs(general_option_checkboxes) do
+        cb:SetChecked(AttuneHelperDB[cb.dbKey or cb:GetName()]==1)
+    end
+
+    if AttuneHelper_UpdateDisplayMode then
+        AttuneHelper_UpdateDisplayMode()
     end
 end
 local function CreateButton(n,p,t,a,ap,x,y,w,h,c,s) s=s or 1 local x1,y1,x2,y2=65,176,457,290 local rw,rh=x2-x1,y2-y1 local u1,u2,v1,v2=x1/512,x2/512,y1/512,y2/512 if w and not h then h=w*rh/rw elseif h and not w then w=h*rw/rh else h=24 w=h*rw/rh*1.5 end local b=CreateFrame("Button",n,p,"UIPanelButtonTemplate") b:SetSize(w,h) b:SetScale(s) b:SetPoint(ap,a,ap,x,y) b:SetText(t) local thA=AttuneHelperDB["Button Theme"] or "Normal" if themePaths[thA] then b:SetNormalTexture(themePaths[thA].normal) b:SetPushedTexture(themePaths[thA].pushed) b:SetHighlightTexture(themePaths[thA].pushed,"ADD") for _,st in ipairs({"Normal","Pushed","Highlight"}) do local tx=b["Get"..st.."Texture"](b) if tx then tx:SetTexCoord(u1,u2,v1,v2) end local cl=c and c[st:lower()] if cl and tx then tx:SetVertexColor(cl[1],cl[2],cl[3],cl[4] or 1)end end end local fo=b:GetFontString() if fo then fo:SetFont("Fonts\\FRIZQT__.TTF",10,"OUTLINE") end b:SetBackdropColor(0,0,0,0.5) b:SetBackdropBorderColor(1,1,1,1) return b end
@@ -557,24 +633,25 @@ local general_options_list_for_checkboxes={
     {text = "Limit Selling to 12 Items?", dbKey = "Limit Selling to 12 Items?"},
     {text = "Disable Auto-Equip Mythic BoE", dbKey = "Disable Auto-Equip Mythic BoE"},
     {text = "Equip BoE Bountied Items", dbKey = "Equip BoE Bountied Items"},
-    {text = "Equip New Affixes Only", dbKey = "EquipNewAffixesOnly"} 
+    {text = "Equip New Affixes Only", dbKey = "EquipNewAffixesOnly"},
+    {text = "Enable Vendor Sell Confirmation Dialog", dbKey = "EnableVendorSellConfirmationDialog"} -- UPDATED OPTION
 }
 
 local function CreateCheckbox(t,p,x,y,iG,dkO) local cN,idK=t,dkO or t if not iG and not dkO then cN="AttuneHelperBlacklist_"..t.."Checkbox" elseif dkO and iG then if string.match(idK,"BASE")or string.match(idK,"FORGED")then cN="AttuneHelperForgeType_"..dkO.."_Checkbox" else cN="AttuneHelperGeneral_"..idK:gsub("[^%w]","").."Checkbox" end elseif iG then cN="AttuneHelperGeneral_"..idK:gsub("[^%w]","").."Checkbox" end local cb=CreateFrame("CheckButton",cN,p,"UICheckButtonTemplate") cb:SetPoint("TOPLEFT",x,y) local txt=cb:CreateFontString(nil,"ARTWORK","GameFontHighlight") txt:SetPoint("LEFT",cb,"RIGHT",4,0) txt:SetText(t) cb.dbKey=idK return cb end
 
 local function InitializeOptionCheckboxes()
-    wipe(blacklist_checkboxes) 
-    wipe(general_option_checkboxes) 
+    wipe(blacklist_checkboxes)
+    wipe(general_option_checkboxes)
 
     local x,y,r,c=16,-60,0,0 for _,sN in ipairs(slots)do local cb=CreateCheckbox(sN,blacklistPanel,x+120*c,y-33*r,false,sN) table.insert(blacklist_checkboxes,cb) cb:SetScript("OnClick",SaveAllSettings) r=r+1 if r==6 then r=0 c=c+1 end end
-    
-    local gYO=-60 
-    for _,oD in ipairs(general_options_list_for_checkboxes)do 
-        local cb=CreateCheckbox(oD.text,generalOptionsPanel,16,gYO,true,oD.dbKey) 
-        table.insert(general_option_checkboxes,cb) 
-        if oD.dbKey=="EquipNewAffixesOnly"then 
+
+    local gYO=-60
+    for _,oD in ipairs(general_options_list_for_checkboxes)do
+        local cb=CreateCheckbox(oD.text,generalOptionsPanel,16,gYO,true,oD.dbKey)
+        table.insert(general_option_checkboxes,cb)
+        if oD.dbKey=="EquipNewAffixesOnly"then
             cb:SetScript("OnClick",function(s)SaveAllSettings() UpdateItemCountText()end)
-        else 
+        else
             cb:SetScript("OnClick",SaveAllSettings)
         end
         gYO=gYO-33
@@ -588,8 +665,8 @@ local function InitializeForgeOptionCheckboxes()
 end
 
 local function InitializeThemeOptions()
-    wipe(theme_option_controls) 
-    local yOffset = -60 
+    wipe(theme_option_controls)
+    local yOffset = -60
     local themePanel = _G["AttuneHelperThemeOptionsPanel"]
     if not themePanel then print_debug_general("Theme panel not found for init!") return end
 
@@ -597,47 +674,47 @@ local function InitializeThemeOptions()
     bgL:SetPoint("TOPLEFT", 16, yOffset) bgL:SetText("Background Style:")
     theme_option_controls.bgLabel = bgL
     local lastAnchor = bgL
-    yOffset = yOffset - 10 
+    yOffset = yOffset - 10
 
     local bgDD=CreateFrame("Frame","AttuneHelperBgDropdown",themePanel,"UIDropDownMenuTemplate")
     bgDD:SetPoint("TOPLEFT",lastAnchor,"BOTTOMLEFT",0,-8) UIDropDownMenu_SetWidth(bgDD,160)
     theme_option_controls.bgDropdown = bgDD
     UIDropDownMenu_Initialize(bgDD,function(s)for sN,_ in pairs(BgStyles)do if sN~="MiniModeBg"then local i=UIDropDownMenu_CreateInfo() i.text=sN i.value=sN i.func=function(self) UIDropDownMenu_SetSelectedValue(bgDD,self.value) AttuneHelperDB["Background Style"]=self.value UIDropDownMenu_SetText(bgDD,self.value) if AttuneHelper_UpdateDisplayMode then AttuneHelper_UpdateDisplayMode()end SaveAllSettings() end i.checked=(sN==AttuneHelperDB["Background Style"]) UIDropDownMenu_AddButton(i)end end end)
     lastAnchor = bgDD
-    yOffset = yOffset - 30  
+    yOffset = yOffset - 30
 
     local sw=CreateFrame("Button","AttuneHelperBgColorSwatch",themePanel) sw:SetSize(16,16)
     sw:SetPoint("TOPLEFT",lastAnchor,"BOTTOMLEFT",0,-15) sw:SetBackdrop{bgFile="Interface\\Tooltips\\UI-Tooltip-Background",edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=4,edgeSize=4,insets={left=1,right=1,top=1,bottom=1}} sw:SetBackdropBorderColor(0,0,0,1)
     theme_option_controls.bgColorSwatch = sw
     sw:SetScript("OnEnter",function(s)GameTooltip:SetOwner(s,"ANCHOR_RIGHT") GameTooltip:SetText("Background Color") GameTooltip:Show()end) sw:SetScript("OnLeave",GameTooltip_Hide)
     sw:SetScript("OnClick",function(s)local c=AttuneHelperDB["Background Color"] ColorPickerFrame.func=function()local r,g,b=ColorPickerFrame:GetColorRGB() c[1],c[2],c[3]=r,g,b sw:SetBackdropColor(r,g,b,1) if AttuneHelper_UpdateDisplayMode then AttuneHelper_UpdateDisplayMode()end SaveAllSettings()end ColorPickerFrame.opacityFunc=function()local nA if _G.ColorPickerFrameOpacitySlider then nA=_G.ColorPickerFrameOpacitySlider:GetValue()else nA=ColorPickerFrame.opacity end if type(nA)=="number"then if ColorPickerFrame.previousValues then ColorPickerFrame.previousValues.a=nA end AttuneHelperDB["Background Color"][4]=nA if AttuneHelper_UpdateDisplayMode then AttuneHelper_UpdateDisplayMode()end SaveAllSettings()end end ColorPickerFrame.cancelFunc=function(pV)if pV then AttuneHelperDB["Background Color"]={pV.r,pV.g,pV.b,pV.a} if AttuneHelper_UpdateDisplayMode then AttuneHelper_UpdateDisplayMode()end sw:SetBackdropColor(pV.r,pV.g,pV.b,1) if _G.AttuneHelperAlphaSlider then _G.AttuneHelperAlphaSlider:SetValue(pV.a)end end end ColorPickerFrame.hasOpacity=true ColorPickerFrame.opacity=AttuneHelperDB["Background Color"][4] ColorPickerFrame.previousValues={r=AttuneHelperDB["Background Color"][1],g=AttuneHelperDB["Background Color"][2],b=AttuneHelperDB["Background Color"][3],a=AttuneHelperDB["Background Color"][4]} ColorPickerFrame:SetColorRGB(c[1],c[2],c[3]) ColorPickerFrame:Show()end)
-    
+
     local swL=themePanel:CreateFontString(nil,"ARTWORK","GameFontHighlight") swL:SetPoint("LEFT",sw,"RIGHT",4,0) swL:SetText("BG Color")
     theme_option_controls.bgColorLabel = swL
-    lastAnchor = swL 
-    yOffset = yOffset - 20 
+    lastAnchor = swL
+    yOffset = yOffset - 20
 
-    local alpL=themePanel:CreateFontString(nil,"ARTWORK","GameFontNormal") 
-    alpL:SetPoint("TOPLEFT",sw,"BOTTOMLEFT",-2, -10) 
-    alpL:SetText("BG Transparency:") 
+    local alpL=themePanel:CreateFontString(nil,"ARTWORK","GameFontNormal")
+    alpL:SetPoint("TOPLEFT",sw,"BOTTOMLEFT",-2, -10)
+    alpL:SetText("BG Transparency:")
     theme_option_controls.alphaLabel = alpL
     lastAnchor = alpL
-    yOffset = yOffset - 10 
+    yOffset = yOffset - 10
 
     local alpS=CreateFrame("Slider","AttuneHelperAlphaSlider",themePanel,"OptionsSliderTemplate") alpS:SetOrientation("HORIZONTAL") alpS:SetMinMaxValues(0,1) alpS:SetValueStep(0.01) alpS:SetWidth(150)
     alpS:SetPoint("TOPLEFT",lastAnchor,"BOTTOMLEFT",0,-8)
     theme_option_controls.alphaSlider = alpS
-    _G.AttuneHelperAlphaSliderLow:SetText("0") _G.AttuneHelperAlphaSliderHigh:SetText("1") _G.AttuneHelperAlphaSliderText:SetText("") 
+    _G.AttuneHelperAlphaSliderLow:SetText("0") _G.AttuneHelperAlphaSliderHigh:SetText("1") _G.AttuneHelperAlphaSliderText:SetText("")
     alpS:SetScript("OnValueChanged",function(s,v)AttuneHelperDB["Background Color"][4]=v if AttuneHelper_UpdateDisplayMode then AttuneHelper_UpdateDisplayMode()end SaveAllSettings()end)
     lastAnchor = alpS
-    yOffset = yOffset - 35  
+    yOffset = yOffset - 35
 
-    local btL=themePanel:CreateFontString(nil,"ARTWORK","GameFontNormal") 
-    btL:SetPoint("TOPLEFT",lastAnchor,"BOTTOMLEFT",0,-20) 
+    local btL=themePanel:CreateFontString(nil,"ARTWORK","GameFontNormal")
+    btL:SetPoint("TOPLEFT",lastAnchor,"BOTTOMLEFT",0,-20)
     btL:SetText("Button Theme:")
     theme_option_controls.buttonThemeLabel = btL
     lastAnchor = btL
-    yOffset = yOffset - 10 
+    yOffset = yOffset - 10
 
     local btDD=CreateFrame("Frame","AttuneHelperButtonThemeDropdown",themePanel,"UIDropDownMenuTemplate")
     btDD:SetPoint("TOPLEFT",lastAnchor,"BOTTOMLEFT",0,-8) UIDropDownMenu_SetWidth(btDD,160)
@@ -646,16 +723,16 @@ local function InitializeThemeOptions()
     lastAnchor = btDD
     yOffset = yOffset - 30
 
-    local miniModeCheckbox = CreateCheckbox("Mini Mode", themePanel, 16, yOffset -5, true, "Mini Mode") 
+    local miniModeCheckbox = CreateCheckbox("Mini Mode", themePanel, 16, yOffset -5, true, "Mini Mode")
     miniModeCheckbox:SetPoint("TOPLEFT", _G["AttuneHelperButtonThemeDropdown"], "BOTTOMLEFT", 0, -15)
 
     miniModeCheckbox:SetScript("OnClick", function(self)
         AttuneHelperDB["Mini Mode"] = self:GetChecked() and 1 or 0
-        SaveAllSettings() 
+        SaveAllSettings()
         if AttuneHelper_UpdateDisplayMode then AttuneHelper_UpdateDisplayMode() end
     end)
-    table.insert(general_option_checkboxes, miniModeCheckbox) 
-    theme_option_controls.miniModeCheckbox = miniModeCheckbox 
+    table.insert(general_option_checkboxes, miniModeCheckbox) -- It's a general option, but placed in theme panel for layout
+    theme_option_controls.miniModeCheckbox = miniModeCheckbox
 end
 
 InitializeOptionCheckboxes()
@@ -666,7 +743,7 @@ generalOptionsPanel.okay=function()SaveAllSettings() if AttuneHelper_UpdateDispl
 generalOptionsPanel.cancel=function()LoadAllSettings() UpdateItemCountText()end
 generalOptionsPanel.refresh=function()LoadAllSettings() UpdateItemCountText()end
 themeOptionsPanel.okay=function()SaveAllSettings() if AttuneHelper_UpdateDisplayMode then AttuneHelper_UpdateDisplayMode()end end
-themeOptionsPanel.cancel=LoadAllSettings 
+themeOptionsPanel.cancel=LoadAllSettings
 themeOptionsPanel.refresh=LoadAllSettings
 blacklistPanel.okay=SaveAllSettings
 blacklistPanel.cancel=LoadAllSettings
@@ -706,7 +783,7 @@ EquipAllButton:SetScript("OnClick", function()
     print_debug_general("EquipAllButton clicked. EquipNewAffixesOnly=" .. tostring(AttuneHelperDB["EquipNewAffixesOnly"]))
     if MerchantFrame and MerchantFrame:IsShown() then print_debug_general("Merchant frame open, aborting equip.") return end
     for bag = 0, 4 do UpdateBagCache(bag) end
-    UpdateItemCountText() 
+    UpdateItemCountText()
     print_debug_general("Bag cache updated. Current Attunable Item Count (for display): " .. currentAttunableItemCount)
 
     local slotsList = {"HeadSlot","NeckSlot","ShoulderSlot","BackSlot","ChestSlot","WristSlot","HandsSlot","WaistSlot","LegsSlot","FeetSlot","Finger0Slot","Finger1Slot","Trinket0Slot","Trinket1Slot","MainHandSlot","SecondaryHandSlot","RangedSlot"}
@@ -727,23 +804,23 @@ EquipAllButton:SetScript("OnClick", function()
         willBindScannerTooltip:Hide() return true
     end
 
-    local function CanEquipItemPolicyCheck(candidateRec) 
+    local function CanEquipItemPolicyCheck(candidateRec)
         local itemLink = candidateRec.link local itemBag = candidateRec.bag local itemSlotInBag = candidateRec.slot
         local itemId = GetItemIDFromLink(itemLink)
-        
+
         local itemIsBoENotBound = IsBoEAndNotBound(itemLink, itemBag, itemSlotInBag)
-        if itemId then 
+        if itemId then
             local isBountied = (_G.GetCustomGameData and (_G.GetCustomGameData(31, itemId) or 0) > 0) or false
             if itemIsBoENotBound and isBountied then
                 if AttuneHelperDB["Equip BoE Bountied Items"] ~= 1 then print_debug_general("PolicyCheck Fail (BoE Bountied not allowed): " .. itemLink) return false end
             else
-                local isMythic = (itemId >= MYTHIC_MIN_ITEMID) 
+                local isMythic = (itemId >= MYTHIC_MIN_ITEMID)
                 if AttuneHelperDB["Disable Auto-Equip Mythic BoE"] == 1 and isMythic and itemIsBoENotBound then print_debug_general("PolicyCheck Fail (Mythic BoE disabled): " .. itemLink) return false end
             end
         elseif itemIsBoENotBound then
-             print_debug_general("PolicyCheck: No ItemID for BoE checks on "..itemLink..", proceeding with forge check.")
+            print_debug_general("PolicyCheck: No ItemID for BoE checks on "..itemLink..", proceeding with forge check.")
         end
-        
+
         local determinedForgeLevel = GetForgeLevelFromLink(itemLink) -- Using updated function
         print_debug_general("PolicyCheck for " .. itemLink .. ": DeterminedForgeLevel=" .. tostring(determinedForgeLevel) .. " (BASE=0, TF=1, WF=2, LF=3)")
 
@@ -753,7 +830,7 @@ EquipAllButton:SetScript("OnClick", function()
         if determinedForgeLevel == FORGE_LEVEL_MAP.TITANFORGED and allowedTypes.TITANFORGED then print_debug_general("PolicyCheck Pass: TITANFORGED allowed for " .. itemLink) return true end
         if determinedForgeLevel == FORGE_LEVEL_MAP.WARFORGED and allowedTypes.WARFORGED then print_debug_general("PolicyCheck Pass: WARFORGED allowed for " .. itemLink) return true end
         if determinedForgeLevel == FORGE_LEVEL_MAP.LIGHTFORGED and allowedTypes.LIGHTFORGED then print_debug_general("PolicyCheck Pass: LIGHTFORGED allowed for " .. itemLink) return true end
-        
+
         print_debug_general("PolicyCheck Fail (Forge type " .. tostring(determinedForgeLevel) .. " not allowed or mapping issue): " .. itemLink .. " Allowed: B:"..tostring(allowedTypes.BASE).." TF:"..tostring(allowedTypes.TITANFORGED).." WF:"..tostring(allowedTypes.WARFORGED).." LF:"..tostring(allowedTypes.LIGHTFORGED) )
         return false
     end
@@ -763,7 +840,7 @@ EquipAllButton:SetScript("OnClick", function()
         if ohLink then
             local ohItemId = GetItemIDFromLink(ohLink)
             if ohItemId then
-                 if ItemIsActivelyLeveling(ohItemId, ohLink) then 
+                if ItemIsActivelyLeveling(ohItemId, ohLink) then
                     print_debug_general("Cannot equip 2H: OH item "..ohLink.." (ID: "..ohItemId..") is actively leveling (progress < 100%).")
                     return false
                 end
@@ -775,60 +852,60 @@ EquipAllButton:SetScript("OnClick", function()
     local function checkAndEquip(slotName)
         print_debug_general("--- Checking slot: " .. slotName .. " ---")
         if AttuneHelperDB[slotName] == 1 then print_debug_general("Slot "..slotName.." is blacklisted.") return end
-    
+
         local currentMHLink_OverallCheck = GetInventoryItemLink("player", GetInventorySlotInfo("MainHandSlot"))
         local currentMHIs2H = false
         if currentMHLink_OverallCheck then
             local _,_,_,_,_,_,_,_,currentMHEquipLoc = GetItemInfo(currentMHLink_OverallCheck)
             if currentMHEquipLoc == "INVTYPE_2HWEAPON" then currentMHIs2H = true print_debug_general("Current MH is 2H: " .. currentMHLink_OverallCheck) end
         end
-    
+
         if slotName == "SecondaryHandSlot" then
             if currentMHIs2H then print_debug_general("Cannot equip OH for "..slotName.." because current MH is 2H.") return end
             if twoHanderEquippedInMainHandThisEquipCycle then print_debug_general("Cannot equip OH for "..slotName.." because a 2H was equipped this cycle.") return end
         end
-    
+
         local invSlotID = GetInventorySlotInfo(slotName) local eqID = slotNumberMapping[slotName] or invSlotID
         local equippedItemLink = GetInventoryItemLink("player", invSlotID)
-        local isEquippedItemActivelyLevelingFlag = false 
+        local isEquippedItemActivelyLevelingFlag = false
         local equippedItemName, equippedItemEquipLoc
-    
+
         if equippedItemLink then
             print_debug_general(slotName .. " has equipped: " .. equippedItemLink)
             local equippedItemId = GetItemIDFromLink(equippedItemLink)
             equippedItemName, _,_,_,_,_,_,_,equippedItemEquipLoc = GetItemInfo(equippedItemLink)
             if equippedItemId then
-                 isEquippedItemActivelyLevelingFlag = ItemIsActivelyLeveling(equippedItemId, equippedItemLink)
-            else 
+                isEquippedItemActivelyLevelingFlag = ItemIsActivelyLeveling(equippedItemId, equippedItemLink)
+            else
                 print_debug_general("  Equipped item has no ID: " .. equippedItemLink)
             end
-        else 
+        else
             print_debug_general(slotName .. " is empty.")
         end
-    
+
         if isEquippedItemActivelyLevelingFlag then
             print_debug_general(slotName .. " is ALREADY equipped with an actively leveling item (progress < 100%). Priority 1 Met.")
-            return 
+            return
         end
-        
+
         print_debug_general(slotName .. ": Not blocked by an actively leveling equipped item. Looking for P2 (Attunable from bags) items...")
         local candidates = equipSlotCache[slotName] or {}
-        local isEquipNewAffixesOnlyEnabled = (AttuneHelperDB["EquipNewAffixesOnly"] == 1) 
-    
+        local isEquipNewAffixesOnlyEnabled = (AttuneHelperDB["EquipNewAffixesOnly"] == 1)
+
         -- P2: Look for attunable items from bags, prioritized by forge level and progress
         local attunableCandidates = {}
         for _, rec in ipairs(candidates) do
-            if rec.isAttunable then 
-                local recItemId = GetItemIDFromLink(rec.link) 
-                if recItemId then 
+            if rec.isAttunable then
+                local recItemId = GetItemIDFromLink(rec.link)
+                if recItemId then
                     print_debug_general("  P2 Candidate (from bag): " .. rec.link .. " (isAttunable from cache: true)")
                     if ItemQualifiesForBagEquip(recItemId, rec.link, isEquipNewAffixesOnlyEnabled) then
                         print_debug_general("    Candidate QUALIFIES for equipping (ItemQualifiesForBagEquip=true based on EquipNewAffixesOnly=" ..tostring(isEquipNewAffixesOnlyEnabled)..")")
                         if CanEquipItemPolicyCheck(rec) then
                             print_debug_general("    Passed policy check.")
                             table.insert(attunableCandidates, rec)
-                        else 
-                            print_debug_general("    Failed policy check for P2 bag item " .. rec.link) 
+                        else
+                            print_debug_general("    Failed policy check for P2 bag item " .. rec.link)
                         end
                     else
                         print_debug_general("    Candidate '" .. (rec.name or "Unknown") .. "' does NOT qualify for equipping (ItemQualifiesForBagEquip=false based on EquipNewAffixesOnly="..tostring(isEquipNewAffixesOnlyEnabled)..").")
@@ -836,12 +913,12 @@ EquipAllButton:SetScript("OnClick", function()
                 end
             end
         end
-    
+
         -- Sort candidates by priority (higher forge level and lower progress first)
         table.sort(attunableCandidates, function(a, b)
             return ShouldPrioritizeItem(a.link, b.link)
         end)
-    
+
         -- Try to equip the best candidate
         for _, rec in ipairs(attunableCandidates) do
             local proceed = true
@@ -858,42 +935,42 @@ EquipAllButton:SetScript("OnClick", function()
                         twoHanderEquippedInMainHandThisEquipCycle = true
                         print_debug_general("    Set twoHanderEquippedInMainHandThisEquipCycle = true")
                     end
-                    return 
+                    return
                 end
-            else 
-                print_debug_general("    Not proceeding with equip for P2 bag item " .. rec.link) 
+            else
+                print_debug_general("    Not proceeding with equip for P2 bag item " .. rec.link)
             end
         end
         print_debug_general(slotName .. ": Finished P2 (Attunable from bags) candidates loop. No P2 item equipped.")
-    
+
         print_debug_ahset(slotName, "Starting P3 (AHSet) evaluation.")
         if equippedItemLink and equippedItemName and AHSetList[equippedItemName] == slotName then
             print_debug_ahset(slotName, "Equipped item '" .. equippedItemName .. "' IS the designated AHSet item for this slot. Skipping P3 bag candidates.")
-            return 
+            return
         elseif equippedItemLink and equippedItemName then
             print_debug_ahset(slotName, "Equipped item '" .. equippedItemName .. "' is NOT the designated AHSet item OR item not in AHSetList for this slot. Current AHSet designation for equipped item: " .. tostring(AHSetList[equippedItemName]))
         else
             print_debug_ahset(slotName, "Slot is empty or equipped item has no name. Proceeding to check bag candidates for AHSet.")
         end
-        
+
         local currentMHLink_forAHSetOHCheck = GetInventoryItemLink("player", GetInventorySlotInfo("MainHandSlot"))
-    
+
         for _, rec_set in ipairs(candidates) do
-            local designatedSlotForCandidate = AHSetList[rec_set.name] 
+            local designatedSlotForCandidate = AHSetList[rec_set.name]
             print_debug_ahset(slotName, "Checking AHSet bag candidate: '" .. rec_set.name .. "' (" .. rec_set.link .. "). AHSetList designation: " .. tostring(designatedSlotForCandidate))
-    
-            if designatedSlotForCandidate == slotName then 
+
+            if designatedSlotForCandidate == slotName then
                 print_debug_ahset(slotName, "Candidate '" .. rec_set.name .. "' IS designated in AHSetList for current slot (" .. slotName .. ").")
                 local candidateEquipLoc = rec_set.equipSlot
-                local equipThisSetItem = false 
-    
+                local equipThisSetItem = false
+
                 if slotName == "MainHandSlot" then
                     if candidateEquipLoc == "INVTYPE_WEAPON" or candidateEquipLoc == "INVTYPE_2HWEAPON" or candidateEquipLoc == "INVTYPE_WEAPONMAINHAND" then equipThisSetItem = true end
                 elseif slotName == "SecondaryHandSlot" then
-                    if not currentMHIs2H then 
+                    if not currentMHIs2H then
                         if candidateEquipLoc == "INVTYPE_WEAPON" or candidateEquipLoc == "INVTYPE_WEAPONOFFHAND" or candidateEquipLoc == "INVTYPE_SHIELD" or candidateEquipLoc == "INVTYPE_HOLDABLE" then
                             if currentMHLink_forAHSetOHCheck and currentMHLink_forAHSetOHCheck == rec_set.link then
-                                local mhItemNameForSetCheck, _,_,_,_,_,_,_,_ = GetItemInfo(currentMHLink_forAHSetOHCheck) 
+                                local mhItemNameForSetCheck, _,_,_,_,_,_,_,_ = GetItemInfo(currentMHLink_forAHSetOHCheck)
                                 if mhItemNameForSetCheck and AHSetList[mhItemNameForSetCheck] == "MainHandSlot" then
                                     print_debug_ahset(slotName, "Cannot equip "..rec_set.link.." in OH for AHSet, it's the *exact same item link* currently in MH AND is the MH AHSet item.")
                                 else equipThisSetItem = true end
@@ -902,46 +979,46 @@ EquipAllButton:SetScript("OnClick", function()
                     end
                 elseif slotName == "RangedSlot" then
                     if tContains({"INVTYPE_RANGED","INVTYPE_THROWN","INVTYPE_RELIC","INVTYPE_WAND", "INVTYPE_RANGEDRIGHT"}, candidateEquipLoc) then equipThisSetItem = true end
-                else 
+                else
                     local unifiedCandidateSlot = itemTypeToUnifiedSlot[candidateEquipLoc]
                     if (type(unifiedCandidateSlot) == "string" and unifiedCandidateSlot == slotName) or (type(unifiedCandidateSlot) == "table" and tContains(unifiedCandidateSlot, slotName)) then equipThisSetItem = true end
                 end
-                
+
                 print_debug_ahset(slotName, "Candidate '" .. rec_set.name .. "' type (" .. candidateEquipLoc .. ") suitable for target slot " .. slotName .. "? Result: " .. tostring(equipThisSetItem))
-    
+
                 if equipThisSetItem then
                     local passesPolicy = CanEquipItemPolicyCheck(rec_set)
                     print_debug_ahset(slotName, "Candidate '" .. rec_set.name .. "' passes CanEquipItemPolicyCheck? Result: " .. tostring(passesPolicy))
-                    
+
                     if passesPolicy then
                         local proceed = true
                         if (slotName == "MainHandSlot" or slotName == "RangedSlot") and rec_set.equipSlot == "INVTYPE_2HWEAPON" then
-                            if not CanEquip2HInMainHandWithoutInterruptingOHAttunement() then 
-                                proceed = false 
+                            if not CanEquip2HInMainHandWithoutInterruptingOHAttunement() then
+                                proceed = false
                                 print_debug_ahset(slotName, "Proceed set to false: AHSet 2H ("..rec_set.name..") for MH/Ranged would interrupt OH leveling.")
                             end
                         end
                         if slotName == "SecondaryHandSlot" then
-                            if currentMHIs2H then 
-                                proceed = false 
+                            if currentMHIs2H then
+                                proceed = false
                                 print_debug_ahset(slotName, "Proceed set to false: AHSet OH target ("..rec_set.name.."), but current MH is 2H.")
-                            elseif cannotEquipOffHandWeaponThisSession and IsWeaponTypeForOffHandCheck(rec_set.equipSlot) then 
-                                proceed = false 
+                            elseif cannotEquipOffHandWeaponThisSession and IsWeaponTypeForOffHandCheck(rec_set.equipSlot) then
+                                proceed = false
                                 print_debug_ahset(slotName, "Proceed set to false: cannotEquipOffHandWeaponThisSession is true and AHSet item ("..rec_set.name..") is weapon type for OH.")
                             end
                         end
-                        
+
                         print_debug_ahset(slotName, "Final 'proceed' decision for AHSet item '"..rec_set.name.."': " .. tostring(proceed))
-    
+
                         if proceed then
                             print_debug_ahset(slotName, "ATTEMPTING EQUIP of P3 (AHSet) item: " .. rec_set.link .. " into " .. slotName)
-                            if performEquipAction(rec_set, eqID, slotName) then 
-                                if rec_set.equipSlot == "INVTYPE_2HWEAPON" and (slotName=="MainHandSlot" or slotName=="RangedSlot") then 
-                                    twoHanderEquippedInMainHandThisEquipCycle = true 
+                            if performEquipAction(rec_set, eqID, slotName) then
+                                if rec_set.equipSlot == "INVTYPE_2HWEAPON" and (slotName=="MainHandSlot" or slotName=="RangedSlot") then
+                                    twoHanderEquippedInMainHandThisEquipCycle = true
                                     print_debug_ahset(slotName, "Set twoHanderEquippedInMainHandThisEquipCycle = true for AHSet 2H: " .. rec_set.name)
                                 end
                                 print_debug_ahset(slotName, "SUCCESSFULLY EQUIPPED P3 (AHSet) item: " .. rec_set.name)
-                                return 
+                                return
                             else
                                 print_debug_ahset(slotName, "performEquipAction FAILED for P3 (AHSet) item: " .. rec_set.name)
                             end
@@ -951,7 +1028,7 @@ EquipAllButton:SetScript("OnClick", function()
             end
         end
         print_debug_ahset(slotName, "Finished P3 (AHSet from bags) candidates loop. No P3 item was equipped from bags.")
-    
+
         if slotName=="SecondaryHandSlot"and cannotEquipOffHandWeaponThisSession then
             print_debug_ahset(slotName, "In cannotEquipOffHandWeaponThisSession block, looking for non-weapon offhands (AHSet or Attunable).")
             for _,r_oh_c in ipairs(candidates)do
@@ -964,20 +1041,20 @@ EquipAllButton:SetScript("OnClick", function()
                             isGoodForFallback = true
                             print_debug_ahset(slotName, "Fallback OH '"..r_oh_c.name.."' is attunable and qualifies for leveling.")
                         end
-                        
+
                         if not isGoodForFallback and AHSetList[r_oh_c.name] == slotName then
-                            isGoodForFallback = true 
+                            isGoodForFallback = true
                             print_debug_ahset(slotName, "Fallback OH '"..r_oh_c.name.."' IS AHSet for this slot.")
                         end
-                        
+
                         if isGoodForFallback then
                             local passesPolicyFallback = CanEquipItemPolicyCheck(r_oh_c)
                             print_debug_ahset(slotName, "Fallback OH '"..r_oh_c.name.."' passes CanEquipItemPolicyCheck? " .. tostring(passesPolicyFallback))
                             if passesPolicyFallback then
                                 print_debug_ahset(slotName, "ATTEMPTING EQUIP of Fallback OH: "..r_oh_c.link)
-                                if performEquipAction(r_oh_c,eqID,slotName)then 
+                                if performEquipAction(r_oh_c,eqID,slotName)then
                                     print_debug_ahset(slotName, "SUCCESSFULLY EQUIPPED Fallback OH: "..r_oh_c.name)
-                                    return 
+                                    return
                                 else
                                     print_debug_ahset(slotName, "performEquipAction FAILED for Fallback OH: "..r_oh_c.name)
                                 end
@@ -997,24 +1074,24 @@ SortInventoryButton:SetScript("OnEnter", function(self) GameTooltip:SetOwner(sel
 SortInventoryButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 SortInventoryButton:SetScript("OnClick", function()
     local bagZ, mythic, ignoredM, emptyS, ignoredL = {}, {}, {}, {}, {}
-    
+
     -- Build ignored list (case-insensitive)
-    for n in pairs(AHIgnoreList) do 
-        ignoredL[string.lower(n)] = true 
+    for n in pairs(AHIgnoreList) do
+        ignoredL[string.lower(n)] = true
     end
-    
+
     -- Improved mythic detection function
     local function IsMythic(id)
         if not id then return false end
-        
+
         -- First check: ID-based detection for known mythic range
         if id >= MYTHIC_MIN_ITEMID then return true end
-        
+
         -- Second check: Tooltip scanning for "Mythic" text
         local tt = CreateFrame("GameTooltip", "AttuneHelperMythicScanTooltip", nil, "GameTooltipTemplate")
         tt:SetOwner(UIParent, "ANCHOR_NONE")
         tt:SetHyperlink("item:" .. id)
-        
+
         for i = 1, tt:NumLines() do
             local line = _G["AttuneHelperMythicScanTooltipTextLeft" .. i]
             if line then
@@ -1025,11 +1102,11 @@ SortInventoryButton:SetScript("OnClick", function()
                 end
             end
         end
-        
+
         tt:Hide()
         return false
     end
-    
+
     -- Check for enough empty slots
     local emptyCount = 0
     for b = 0, 4 do
@@ -1039,21 +1116,21 @@ SortInventoryButton:SetScript("OnClick", function()
             end
         end
     end
-    
+
     if emptyCount < 16 then
         print("|cffff0000[Attune Helper]|r: Need at least 16 empty slots for sorting.")
         return
     end
-    
+
     -- Clear tables
     wipe(emptyS)
     wipe(bagZ)
     wipe(mythic)
     wipe(ignoredM)
-    
+
     -- Track which slots in bag 0 will become available
     local availableBag0Slots = {}
-    
+
     -- Scan all bags and categorize items
     for b = 0, 4 do
         for s = 1, GetContainerNumSlots(b) do
@@ -1062,11 +1139,11 @@ SortInventoryButton:SetScript("OnClick", function()
                 local name = GetItemInfo(id)
                 local isMythicItem = IsMythic(id)
                 local isIgnored = false
-                
+
                 if type(name) == "string" and name ~= "" then
                     isIgnored = ignoredL[string.lower(name)]
                 end
-                
+
                 if b == 0 then
                     -- Items currently in bag 0
                     if not isMythicItem then
@@ -1100,13 +1177,13 @@ SortInventoryButton:SetScript("OnClick", function()
             end
         end
     end
-    
+
     -- Sort available bag 0 slots in ascending order
     table.sort(availableBag0Slots)
-    
+
     print("|cffffd200[Attune Helper]|r Found " .. #mythic .. " mythic items to sort.")
     print("|cffffd200[Attune Helper]|r Available bag 0 slots: " .. table.concat(availableBag0Slots, ", "))
-    
+
     -- Function to safely move items
     local function MoveItem(fromBag, fromSlot, toBag, toSlot)
         if GetContainerItemID(fromBag, fromSlot) then
@@ -1121,7 +1198,7 @@ SortInventoryButton:SetScript("OnClick", function()
             end
         end
     end
-    
+
     -- Step 1: Move ignored mythic items out of bag 0
     for _, item in ipairs(ignoredM) do
         if #emptyS > 0 then
@@ -1132,7 +1209,7 @@ SortInventoryButton:SetScript("OnClick", function()
             end
         end
     end
-    
+
     -- Step 2: Move non-mythic items out of bag 0
     for _, item in ipairs(bagZ) do
         if #emptyS > 0 then
@@ -1143,11 +1220,11 @@ SortInventoryButton:SetScript("OnClick", function()
             end
         end
     end
-    
+
     -- Step 3: Move mythic items to bag 0 using our pre-calculated available slots
     local mythicsMoved = 0
     local slotIndex = 1
-    
+
     for _, item in ipairs(mythic) do
         if not item.alreadyInBag0 and slotIndex <= #availableBag0Slots then
             local targetSlot = availableBag0Slots[slotIndex]
@@ -1159,140 +1236,246 @@ SortInventoryButton:SetScript("OnClick", function()
             print("|cffff0000[Attune Helper]|r No more available slots in bag 0 for: " .. (item.name or "Unknown"))
         end
     end
-    
+
     print("|cffffd200[Attune Helper]|r Sorting complete. Moved " .. mythicsMoved .. " mythic items to bag 0.")
 end)
 
-VendorAttunedButton = CreateButton("AttuneHelperVendorAttunedButton",AttuneHelper,"Vendor Attuned",SortInventoryButton,"BOTTOM",0,-27,nil,nil,nil,1.3)
-VendorAttunedButton:SetScript("OnClick",function()
-    if not MerchantFrame:IsShown() then return end 
-    local limit=(AttuneHelperDB["Limit Selling to 12 Items?"]==1) 
-    local maxS=limit and 12 or math.huge 
-    local sold=0
-    
+-- Helper function to get items that would be vendored
+local function GetQualifyingVendorItems()
+    local itemsToVendor = {}
     local boeScanTT = nil
-    local function IsBoEUnbound(itemID,bag,slot_idx)
-        if not itemID then return false end 
-        if not boeScanTT then 
-            boeScanTT=CreateFrame("GameTooltip","AHBoEScan",UIParent,"GameTooltipTemplate") 
+
+    local function IsBoEUnboundForVendorCheck(itemID, bag, slot_idx)
+        if not itemID then return false end
+        if not boeScanTT then
+            boeScanTT = CreateFrame("GameTooltip", "AHBoEScanVendor", UIParent, "GameTooltipTemplate")
         end
-        boeScanTT:SetOwner(UIParent,"ANCHOR_NONE") 
-        boeScanTT:SetHyperlink("item:"..itemID) 
-        local isBoE=false
-        for i=1,boeScanTT:NumLines() do 
-            local lt=_G[boeScanTT:GetName().."TextLeft"..i] 
-            if lt and string.find(lt:GetText() or "","Binds when equipped") then 
-                isBoE=true 
-                break 
-            end 
+        boeScanTT:SetOwner(UIParent, "ANCHOR_NONE")
+        boeScanTT:SetHyperlink("item:" .. itemID)
+        local isBoE = false
+        for i = 1, boeScanTT:NumLines() do
+            local lt = _G[boeScanTT:GetName() .. "TextLeft" .. i]
+            if lt and string.find(lt:GetText() or "", "Binds when equipped") then
+                isBoE = true
+                break
+            end
         end
         if isBoE and bag and slot_idx then
-            boeScanTT:SetOwner(UIParent,"ANCHOR_NONE") 
-            boeScanTT:SetBagItem(bag,slot_idx)
-            for i=1,boeScanTT:NumLines() do 
-                local lt=_G[boeScanTT:GetName().."TextLeft"..i] 
-                if lt and string.find(lt:GetText() or "","Soulbound") then 
-                    boeScanTT:Hide() 
-                    return false 
-                end 
+            boeScanTT:SetOwner(UIParent, "ANCHOR_NONE")
+            boeScanTT:SetBagItem(bag, slot_idx)
+            for i = 1, boeScanTT:NumLines() do
+                local lt = _G[boeScanTT:GetName() .. "TextLeft" .. i]
+                if lt and string.find(lt:GetText() or "", "Soulbound") then
+                    boeScanTT:Hide()
+                    return false -- It's BoE but already bound
+                end
             end
-        end 
-        boeScanTT:Hide() 
-        return isBoE
+        end
+        boeScanTT:Hide()
+        return isBoE -- True if BoE and not found to be Soulbound (or not enough info to tell it's bound from bag item)
     end
-    
-    for b=0,4 do 
-        for s=1,GetContainerNumSlots(b) do 
-            if sold>=maxS then return end 
-            local link=GetContainerItemLink(b,s) 
-            local id=GetContainerItemID(b,s)
-            
-            if link and id then 
-                local n,_,q,_,_,_,_,_,_,_,sellP=GetItemInfo(link) 
-                if n then 
-                    local skip=false 
-                    
-                    -- Check if item has no sell price
-                    if sellP==nil or sellP==0 then 
-                        skip=true 
+
+    for b = 0, 4 do
+        for s = 1, GetContainerNumSlots(b) do
+            local link = GetContainerItemLink(b, s)
+            local id = GetContainerItemID(b, s)
+
+            if link and id then
+                local n, itemLinkFull, q, _, _, _, _, _, itemTexture, sellP = GetItemInfo(link)
+                if n then
+                    local skip = false
+
+                    if sellP == nil or sellP == 0 then
+                        skip = true
                     end
-                    
-                    -- Check if item is in AHIgnoreList
-                    if not skip and AHIgnoreList[n] then 
-                        skip=true 
-                        print("|cffffd200[Attune Helper]|r Skipping (AHIgnore): " .. n)
+
+                    if not skip and AHIgnoreList[n] then
+                        skip = true
+                        print_debug_vendor_preview("GetQualifying: Skipping (AHIgnore): " .. n)
                     end
-                    
-                    -- Check if item is in AHSetList
-                    if not skip and AHSetList[n] then 
-                        skip=true 
-                        print("|cffffd200[Attune Helper]|r Skipping (AHSet): " .. n)
+
+                    if not skip and AHSetList[n] then
+                        skip = true
+                        print_debug_vendor_preview("GetQualifying: Skipping (AHSet): " .. n)
                     end
-                    
-                    -- Check if item is in equipment sets
-                    if not skip and GetNumEquipmentSets then 
-                        for i=1,GetNumEquipmentSets() do 
-                            local _,_,sID=GetEquipmentSetInfo(i) 
-                            if sID then 
-                                local ids={GetEquipmentSetItemIDs(sID)}
-                                for _,idS in ipairs(ids) do 
-                                    if idS and idS~=0 and idS==id then 
-                                        skip=true 
+
+                    if not skip and GetNumEquipmentSets then
+                        for i = 1, GetNumEquipmentSets() do
+                            local _, _, sID = GetEquipmentSetInfo(i)
+                            if sID then
+                                local ids = {GetEquipmentSetItemIDs(sID)}
+                                for _, idS in ipairs(ids) do
+                                    if idS and idS ~= 0 and idS == id then
+                                        skip = true
                                         break
-                                    end 
-                                end 
-                            end 
+                                    end
+                                end
+                            end
                             if skip then break end
-                        end 
-                    end 
-                    
+                        end
+                         if skip then print_debug_vendor_preview("GetQualifying: Skipping (In Equip Set): " .. n) end
+                    end
+
                     if not skip then
-                        -- Check if THIS SPECIFIC VARIANT is fully attuned
-                        local thisVariantProgress = 0  -- Default to 0
-                        if _G.GetItemLinkAttuneProgress then 
+                        local thisVariantProgress = 0
+                        if _G.GetItemLinkAttuneProgress then
                             local progress = GetItemLinkAttuneProgress(link)
-                            if type(progress) == "number" then 
+                            if type(progress) == "number" then
                                 thisVariantProgress = progress
                             else
-                                print_debug_general("VendorAttuned: GetItemLinkAttuneProgress returned non-number for " .. link .. ": " .. tostring(progress))
-                                thisVariantProgress = 0  -- Ensure it's still 0 if not a number
+                                print_debug_vendor_preview("GetQualifying: GetItemLinkAttuneProgress returned non-number for " .. link .. ": " .. tostring(progress))
+                                thisVariantProgress = 0
                             end
                         else
-                            print_debug_general("VendorAttuned: GetItemLinkAttuneProgress API not available for " .. link)
-                            thisVariantProgress = 0  -- Ensure it's 0 if API not available
+                            print_debug_vendor_preview("GetQualifying: GetItemLinkAttuneProgress API not available for " .. link)
+                            thisVariantProgress = 0
                         end
-                        
-                        -- Only consider this item for selling if THIS specific variant is 100% attuned
+
                         local isThisVariantFullyAttuned = (thisVariantProgress >= 100)
-                        
+
                         if not isThisVariantFullyAttuned then
-                            print_debug_general("VendorAttuned: Skipping " .. n .. " - this variant only " .. thisVariantProgress .. "% attuned")
+                            print_debug_vendor_preview("GetQualifying: Skipping " .. n .. " - this variant only " .. thisVariantProgress .. "% attuned")
                             skip = true
                         else
-                            print_debug_general("VendorAttuned: " .. n .. " - this variant is " .. thisVariantProgress .. "% attuned, eligible for selling")
+                            print_debug_vendor_preview("GetQualifying: " .. n .. " - this variant is " .. thisVariantProgress .. "% attuned, eligible for selling consideration")
                         end
                     end
-                    
+
                     if not skip then
-                        local isBoEU=IsBoEUnbound(id,b,s) 
-                        local isM=id>=MYTHIC_MIN_ITEMID 
-                        local noSellBoE=(AttuneHelperDB["Do Not Sell BoE Items"]==1 and isBoEU) 
-                        local sellM=(AttuneHelperDB["Sell Attuned Mythic Gear?"]==1) 
+                        local isBoEU = IsBoEUnboundForVendorCheck(id, b, s)
+                        local isM = id >= MYTHIC_MIN_ITEMID
+                        local noSellBoE = (AttuneHelperDB["Do Not Sell BoE Items"] == 1 and isBoEU)
+                        local sellM = (AttuneHelperDB["Sell Attuned Mythic Gear?"] == 1)
                         local doSell=(isM and sellM) or not isM
-                        
-                        if doSell and not noSellBoE then 
-                            UseContainerItem(b,s) 
-                            sold=sold+1 
-                            -- Ensure thisVariantProgress is never nil here
-                            local progressText = tostring(thisVariantProgress or 0)
-                            print("|cffffd200[Attune Helper]|r Sold: " .. n .. " (" .. progressText .. "% attuned)")
+
+                        if doSell and not noSellBoE then
+                            table.insert(itemsToVendor, {
+                                name = n,
+                                link = link, -- Store the specific link from the bag
+                                id = id,
+                                -- icon = itemTexture, -- Icon will be fetched dynamically for tooltips/popups
+                                quality = q,
+                                bag = b,
+                                slot = s
+                            })
+                            print_debug_vendor_preview("GetQualifying: Adding to list: " .. n)
+                        else
+                           print_debug_vendor_preview("GetQualifying: Skipping due to BoE/Mythic rules: " .. n .. " (doSell="..tostring(doSell)..", noSellBoE="..tostring(noSellBoE)..")")
                         end
                     end
-                end 
+                end
             end
-        end 
+        end
+    end
+    print_debug_vendor_preview("GetQualifyingVendorItems found " .. #itemsToVendor .. " items.")
+    return itemsToVendor
+end
+
+local function SellQualifiedItemsFromDialog(itemsToSellFromDialog)
+    if not MerchantFrame:IsShown() then
+        print_debug_vendor_preview("SellQualifiedItemsFromDialog: Merchant frame not shown.")
+        return
+    end
+    if #itemsToSellFromDialog == 0 then
+        print_debug_vendor_preview("SellQualifiedItemsFromDialog: No items to sell.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffd200[Attune Helper]|r No items to vendor based on current settings.")
+        return
+    end
+
+    local limitSelling = (AttuneHelperDB["Limit Selling to 12 Items?"] == 1)
+    local maxSellCount = limitSelling and 12 or #itemsToSellFromDialog
+    local soldCount = 0
+
+    print_debug_vendor_preview("SellQualifiedItemsFromDialog: Attempting to sell up to " .. maxSellCount .. " items.")
+
+    for i = 1, math.min(#itemsToSellFromDialog, maxSellCount) do
+        local item = itemsToSellFromDialog[i]
+        if item and item.bag and item.slot then
+            local currentItemLinkInSlot = GetContainerItemLink(item.bag, item.slot)
+            if currentItemLinkInSlot and currentItemLinkInSlot == item.link then -- Check if item is still there
+                UseContainerItem(item.bag, item.slot)
+                soldCount = soldCount + 1
+                print("|cffffd200[Attune Helper]|r Sold: " .. item.name)
+                print_debug_vendor_preview("SellQualifiedItemsFromDialog: Sold " .. item.name .. " from bag " .. item.bag .. ", slot " .. item.slot)
+            else
+                print_debug_vendor_preview("SellQualifiedItemsFromDialog: Item " .. item.name .. " no longer at bag " .. item.bag .. ", slot " .. item.slot .. " or changed. Skipping.")
+            end
+        else
+            print_debug_vendor_preview("SellQualifiedItemsFromDialog: Error - item record invalid for selling: " .. tostring(item and item.name or "Unknown"))
+        end
+    end
+
+    if soldCount > 0 then
+        DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffffd200[Attune Helper]|r Sold %d item(s).", soldCount))
+    else
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffd200[Attune Helper]|r No items were actually sold (they might have been moved or settings changed).")
+    end
+end
+
+StaticPopupDialogs["AH_VENDOR_CONFIRM"] = {
+  text = "%s", -- Will be formatted with the list of items
+  button1 = "Sell",
+  button2 = "Cancel",
+  OnAccept = function(self, data) -- Added self parameter
+    if data and data.itemsToSell then
+        SellQualifiedItemsFromDialog(data.itemsToSell)
+    end
+  end,
+  OnCancel = function()
+    print_debug_vendor_preview("Vendor confirmation cancelled.")
+  end,
+  timeout = 0,
+  whileDead = 1,
+  hideOnEscape = 1,
+  preferredIndex = 3,
+  -- Make the dialog wider to accommodate icons and text
+  maxWidth = 450, -- Increased width
+  minWidth = 350,
+}
+
+VendorAttunedButton = CreateButton("AttuneHelperVendorAttunedButton",AttuneHelper,"Vendor Attuned",SortInventoryButton,"BOTTOM",0,-27,nil,nil,nil,1.3)
+VendorAttunedButton:SetScript("OnClick",function(self) -- self is the button clicked
+    if not MerchantFrame:IsShown() then
+        print_debug_vendor_preview("VendorAttunedButton: Merchant frame not shown.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[Attune Helper]|r You must have a merchant window open to vendor items.")
+        return
+    end
+
+    local itemsToSell = GetQualifyingVendorItems()
+    if #itemsToSell == 0 then
+        print_debug_vendor_preview("VendorAttunedButton: No items qualify for vendoring.")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffd200[Attune Helper]|r No items to vendor based on current settings.")
+        return
+    end
+
+    if AttuneHelperDB["EnableVendorSellConfirmationDialog"] == 1 then
+        local confirmText = "|cffffd200The following items will be sold:|r\n\n"
+        local itemCountInPopup = 0
+        for i, itemData in ipairs(itemsToSell) do
+            if i <= 10 then -- Limit items shown in popup text to avoid excessive length and allow space for icons
+                local _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(itemData.link) -- Fetch icon dynamically
+                local iconString = ""
+                if itemTexture then
+                    iconString = string.format("|T%s:16:16:0:0:64:64:4:60:4:60|t ", itemTexture) -- Added offsets for better spacing
+                end
+                -- The itemData.link already contains quality coloring and is mouseoverable
+                confirmText = confirmText .. iconString .. (itemData.link or itemData.name) .. "\n"
+                itemCountInPopup = itemCountInPopup + 1
+            else
+                confirmText = confirmText .. "\n|cffcccccc...and " .. (#itemsToSell - itemCountInPopup) .. " more items.|r"
+                break
+            end
+        end
+        confirmText = confirmText .. "\n\nAre you sure you want to sell these items?"
+        StaticPopup_Show("AH_VENDOR_CONFIRM", confirmText, nil, {itemsToSell = itemsToSell})
+        print_debug_vendor_preview("VendorAttunedButton: Showing confirmation dialog for " .. #itemsToSell .. " items.")
+    else
+        -- Sell directly without confirmation
+        print_debug_vendor_preview("VendorAttunedButton: Selling directly, confirmation dialog disabled.")
+        SellQualifiedItemsFromDialog(itemsToSell)
     end
 end)
+
 
 ApplyButtonTheme(AttuneHelperDB["Button Theme"])
 AttuneHelperItemCountText=AttuneHelper:CreateFontString(nil,"OVERLAY","GameFontNormal") AttuneHelperItemCountText:SetPoint("BOTTOM",0,6) AttuneHelperItemCountText:SetFont("Fonts\\FRIZQT__.TTF",13,"OUTLINE") AttuneHelperItemCountText:SetTextColor(1,1,1,1) AttuneHelperItemCountText:SetText("Attunables in Inventory: 0")
@@ -1310,9 +1493,9 @@ local function CreateMiniIconButton(name,parent,iconPath,size,tooltipText)
     hl:SetVertexColor(0.2,0.2,0.2,0.3)
     btn:SetScript("OnMouseDown",function(s)s:GetNormalTexture():SetVertexColor(0.75,0.75,0.75)end)
     btn:SetScript("OnMouseUp",function(s)s:GetNormalTexture():SetVertexColor(1,1,1)end)
-  
-    -- Only add simple tooltip for non-equip buttons
-    if tooltipText and name ~= "AttuneHelperMiniEquipButton" then
+
+    -- Only add simple tooltip for non-equip/non-vendor buttons initially
+    if tooltipText and name ~= "AttuneHelperMiniEquipButton" and name ~= "AttuneHelperMiniVendorButton" then
         btn:SetScript("OnEnter", function(s)
             GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
             GameTooltip:SetText(tooltipText)
@@ -1323,22 +1506,86 @@ local function CreateMiniIconButton(name,parent,iconPath,size,tooltipText)
     return btn
   end
 
-AttuneHelperMiniFrame=CreateFrame("Frame","AttuneHelperMiniFrame",UIParent) AttuneHelperMiniFrame:SetSize(88,32) AttuneHelperMiniFrame:SetPoint(unpack(AttuneHelperDB.MiniFramePosition)) AttuneHelperMiniFrame:EnableMouse(true) AttuneHelperMiniFrame:SetMovable(true) AttuneHelperMiniFrame:RegisterForDrag("LeftButton") AttuneHelperMiniFrame:SetScript("OnDragStart",function(s)if s:IsMovable()then s:StartMoving()end end) AttuneHelperMiniFrame:SetScript("OnDragStop",function(s)s:StopMovingOrSizing() AttuneHelperDB.MiniFramePosition={s:GetPoint()}end) AttuneHelperMiniFrame:SetBackdrop({bgFile=BgStyles.MiniModeBg,edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=8,edgeSize=16,insets={left=1,right=1,top=1,bottom=1}}) AttuneHelperMiniFrame:SetBackdropColor(AttuneHelperDB["Background Color"][1],AttuneHelperDB["Background Color"][2],AttuneHelperDB["Background Color"][3],AttuneHelperDB["Background Color"][4]) AttuneHelperMiniFrame:SetBackdropBorderColor(0.3,0.3,0.3,0.8) AttuneHelperMiniFrame:Hide()
-local mBS = 24 local mS = 4 local fP = (AttuneHelperMiniFrame:GetHeight() - mBS) / 2
+  AttuneHelperMiniFrame = CreateFrame("Frame", "AttuneHelperMiniFrame", UIParent)
+  AttuneHelperMiniFrame:SetSize(88, 32)
+
+  -- Safe positioning with validation for mini frame
+  if AttuneHelperDB.MiniFramePosition then
+      local pos = AttuneHelperDB.MiniFramePosition
+      -- Check if position data is valid
+      if pos and #pos >= 5 and pos[1] and pos[3] and pos[4] ~= nil and pos[5] ~= nil then
+          -- Use pcall to safely attempt positioning
+          local success, err = pcall(function()
+              AttuneHelperMiniFrame:SetPoint(pos[1], UIParent, pos[3], pos[4], pos[5])
+          end)
+          if not success then
+              print_debug_general("Failed to restore mini frame position, using default: " .. tostring(err))
+              AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+              AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+          end
+      else
+          -- Reset to default if position data is invalid
+          AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+          AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+      end
+  else
+      -- No saved position, use default
+      AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+      AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+  end
+
+  AttuneHelperMiniFrame:EnableMouse(true)
+  AttuneHelperMiniFrame:SetMovable(true)
+  AttuneHelperMiniFrame:RegisterForDrag("LeftButton")
+
+  AttuneHelperMiniFrame:SetScript("OnDragStart", function(s)
+      if s:IsMovable() then
+          s:StartMoving()
+      end
+  end)
+
+  -- Fixed drag stop handler for mini frame
+  AttuneHelperMiniFrame:SetScript("OnDragStop", function(s)
+      s:StopMovingOrSizing()
+      local point, relativeTo, relativePoint, xOfs, yOfs = s:GetPoint()
+      -- Always save with UIParent as the relative frame for consistency
+      AttuneHelperDB.MiniFramePosition = {point, UIParent, relativePoint, xOfs, yOfs}
+  end)
+
+  AttuneHelperMiniFrame:SetBackdrop({
+      bgFile = BgStyles.MiniModeBg,
+      edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+      tile = true,
+      tileSize = 8,
+      edgeSize = 16,
+      insets = {left = 1, right = 1, top = 1, bottom = 1}
+  })
+
+  AttuneHelperMiniFrame:SetBackdropColor(
+      AttuneHelperDB["Background Color"][1],
+      AttuneHelperDB["Background Color"][2],
+      AttuneHelperDB["Background Color"][3],
+      AttuneHelperDB["Background Color"][4]
+  )
+
+  AttuneHelperMiniFrame:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
+  AttuneHelperMiniFrame:Hide()
+
+  local mBS = 24 local mS = 4 local fP = (AttuneHelperMiniFrame:GetHeight() - mBS) / 2
 AttuneHelperMiniEquipButton = CreateMiniIconButton(
     "AttuneHelperMiniEquipButton",
     AttuneHelperMiniFrame,
     "Interface\\Addons\\AttuneHelper\\assets\\icon1.blp",
     mBS,
-    "Equip Attunables"
+    "Equip Attunables" -- Simple text, detailed in OnEnter
 )
 AttuneHelperMiniEquipButton:SetPoint("LEFT", AttuneHelperMiniFrame, "LEFT", fP, 0)
 
-if EquipAllButton then 
+if EquipAllButton then
     AttuneHelperMiniEquipButton:SetScript("OnClick", function()
-        if EquipAllButton:GetScript("OnClick") then 
+        if EquipAllButton:GetScript("OnClick") then
             EquipAllButton:GetScript("OnClick")()
-        end 
+        end
     end)
 end
 
@@ -1346,34 +1593,66 @@ end
 AttuneHelperMiniEquipButton:SetScript("OnEnter", function(s)
     GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
     GameTooltip:SetText("Equip Attunables")
-    
+
     local attunableData = GetAttunableItemNamesList()
     local count = #attunableData
 
     if count > 0 then
         GameTooltip:AddLine(string.format("Qualifying Attunables (%d):", count), 1, 1, 0) -- Yellow text
         for _, itemData in ipairs(attunableData) do
-            -- Get item icon
-            local itemTexture = GetItemIcon(itemData.id) or GetItemIcon(itemData.link)
+            -- Get item info including quality and texture
+            local _, itemLinkFull, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(itemData.link) -- Use itemData.link
             local iconText = ""
-            
+
             if itemTexture then
                 -- Create icon texture code (16x16 size)
-                iconText = string.format("|T%s:16:16:0:0|t ", itemTexture)
+                iconText = string.format("|T%s:16:16:0:0:64:64:4:60:4:60|t ", itemTexture)
             end
-            
-            -- Add the line with icon and item name
-            GameTooltip:AddLine(iconText .. itemData.name, 0.8, 0.8, 0.8, true)
+
+            -- Get item quality color
+            local qualityColor = ITEM_QUALITY_COLORS[itemQuality or 1]
+            local r, g, b = 0.8, 0.8, 0.8 -- default color
+            if qualityColor then
+                r, g, b = qualityColor.r, qualityColor.g, qualityColor.b
+            end
+
+            -- Build item name with forge/mythic indicators
+            local itemName = itemData.name
+            local indicators = {}
+
+            -- Check if mythic
+            if itemData.id >= MYTHIC_MIN_ITEMID then
+                table.insert(indicators, "|cffFF6600[Mythic]|r")
+            end
+
+            -- Check forge level
+            local forgeLevel = GetForgeLevelFromLink(itemData.link) -- Use itemData.link
+            if forgeLevel == FORGE_LEVEL_MAP.WARFORGED then
+                table.insert(indicators, "|cff9900FF[WF]|r")
+            elseif forgeLevel == FORGE_LEVEL_MAP.LIGHTFORGED then
+                table.insert(indicators, "|cffFFD700[LF]|r")
+            elseif forgeLevel == FORGE_LEVEL_MAP.TITANFORGED then
+                table.insert(indicators, "|cff00CCFF[TF]|r")
+            end
+
+            -- Combine name with indicators
+            local displayName = itemName
+            if #indicators > 0 then
+                displayName = displayName .. " " .. table.concat(indicators, " ")
+            end
+
+            -- Add the line with icon and colored item name
+            GameTooltip:AddLine(iconText .. displayName, r, g, b, true)
         end
     else
         GameTooltip:AddLine("No qualifying attunables in bags.", 1, 0.5, 0.5, true) -- Reddish if none
     end
-    
+
     GameTooltip:Show()
 end)
 AttuneHelperMiniEquipButton:SetScript("OnLeave", GameTooltip_Hide)
 
--- Create and setup AttuneHelperMiniSortButton  
+-- Create and setup AttuneHelperMiniSortButton
 AttuneHelperMiniSortButton = CreateMiniIconButton(
     "AttuneHelperMiniSortButton",
     AttuneHelperMiniFrame,
@@ -1383,11 +1662,11 @@ AttuneHelperMiniSortButton = CreateMiniIconButton(
 )
 AttuneHelperMiniSortButton:SetPoint("LEFT", AttuneHelperMiniEquipButton, "RIGHT", mS, 0)
 
-if SortInventoryButton then 
+if SortInventoryButton then
     AttuneHelperMiniSortButton:SetScript("OnClick", function()
-        if SortInventoryButton:GetScript("OnClick") then 
+        if SortInventoryButton:GetScript("OnClick") then
             SortInventoryButton:GetScript("OnClick")()
-        end 
+        end
     end)
 end
 
@@ -1397,56 +1676,121 @@ AttuneHelperMiniVendorButton = CreateMiniIconButton(
     AttuneHelperMiniFrame,
     "Interface\\Addons\\AttuneHelper\\assets\\icon3.blp",
     mBS,
-    "Vendor Attuned"
+    "Vendor Attuned" -- Simple text, detailed in OnEnter
 )
 AttuneHelperMiniVendorButton:SetPoint("LEFT", AttuneHelperMiniSortButton, "RIGHT", mS, 0)
 
-if VendorAttunedButton then 
-    AttuneHelperMiniVendorButton:SetScript("OnClick", function()
-        if VendorAttunedButton:GetScript("OnClick") then 
-            VendorAttunedButton:GetScript("OnClick")()
-        end 
+if VendorAttunedButton then
+    AttuneHelperMiniVendorButton:SetScript("OnClick", function(self) -- Pass self
+        if VendorAttunedButton:GetScript("OnClick") then
+            VendorAttunedButton:GetScript("OnClick")(self) -- Call with self
+        end
     end)
 end
 
+-- Tooltip for VendorAttunedButton (Main Frame)
+if VendorAttunedButton then
+    VendorAttunedButton:SetScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Vendor Attuned Items")
+        local itemsToVendor = GetQualifyingVendorItems()
+
+        if #itemsToVendor > 0 then
+            GameTooltip:AddLine(string.format("Items to be sold (%d):", #itemsToVendor), 1, 1, 0) -- Yellow
+            for _, itemData in ipairs(itemsToVendor) do
+                local _, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(itemData.link) -- Fetch icon dynamically
+                local iconText = ""
+                if itemTexture then
+                    iconText = string.format("|T%s:16:16:0:0:64:64:4:60:4:60|t ", itemTexture)
+                end
+                local qualityColor = ITEM_QUALITY_COLORS[itemQuality or 1] -- Use fetched quality
+                local r, g, b = 0.8, 0.8, 0.8
+                if qualityColor then r, g, b = qualityColor.r, qualityColor.g, qualityColor.b end
+                GameTooltip:AddLine(iconText .. itemData.name, r, g, b, true)
+            end
+        else
+            GameTooltip:AddLine("No items will be sold based on current settings.", 0.8, 0.8, 0.8, true)
+        end
+
+        if not (MerchantFrame and MerchantFrame:IsShown()) then
+            GameTooltip:AddLine("Open merchant window to sell these items.",1,0.8,0.2, true) -- Orange/Yellowish
+        end
+        GameTooltip:Show()
+    end)
+    VendorAttunedButton:SetScript("OnLeave", GameTooltip_Hide)
+end
+
+-- Tooltip for AttuneHelperMiniVendorButton
+if AttuneHelperMiniVendorButton then
+    AttuneHelperMiniVendorButton:SetScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Vendor Attuned Items")
+        local itemsToVendor = GetQualifyingVendorItems()
+
+        if #itemsToVendor > 0 then
+            GameTooltip:AddLine(string.format("Items to be sold (%d):", #itemsToVendor), 1, 1, 0) -- Yellow
+            for _, itemData in ipairs(itemsToVendor) do
+                local _, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(itemData.link) -- Fetch icon dynamically
+                local iconText = ""
+                if itemTexture then
+                    iconText = string.format("|T%s:16:16:0:0:64:64:4:60:4:60|t ", itemTexture)
+                end
+                local qualityColor = ITEM_QUALITY_COLORS[itemQuality or 1] -- Use fetched quality
+                local r, g, b = 0.8, 0.8, 0.8
+                if qualityColor then r, g, b = qualityColor.r, qualityColor.g, qualityColor.b end
+                GameTooltip:AddLine(iconText .. itemData.name, r, g, b, true)
+            end
+        else
+            GameTooltip:AddLine("No items will be sold based on current settings.", 0.8, 0.8, 0.8, true)
+        end
+
+        if not (MerchantFrame and MerchantFrame:IsShown()) then
+            GameTooltip:AddLine("Open merchant window to sell these items.",1,0.8,0.2, true) -- Orange/Yellowish
+        end
+        GameTooltip:Show()
+    end)
+    AttuneHelperMiniVendorButton:SetScript("OnLeave", GameTooltip_Hide)
+end
+
+
 -- Setup the main EquipAllButton tooltip with icons
-if EquipAllButton then 
+if EquipAllButton then
     EquipAllButton:SetScript("OnEnter", function(s)
-        GameTooltip:SetOwner(s, "ANCHOR_RIGHT") 
-        GameTooltip:SetText("Equip Attunables") 
+        GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Equip Attunables")
         GameTooltip:AddLine(string.format("Attunable Items: %d", currentAttunableItemCount), 1, 1, 0)
-        
+
         -- Add detailed list with icons
         local attunableData = GetAttunableItemNamesList()
         if #attunableData > 0 then
             GameTooltip:AddLine(" ") -- Empty line for spacing
             for _, itemData in ipairs(attunableData) do
                 -- Get item info including quality and texture
-                local _, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(itemData.link)
+                local _, itemLinkFull, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(itemData.link) -- Use itemData.link
                 local iconText = ""
-                
+
                 if itemTexture then
-                    iconText = string.format("|T%s:16:16:0:0|t ", itemTexture)
+                    iconText = string.format("|T%s:16:16:0:0:64:64:4:60:4:60|t ", itemTexture)
                 end
-                
+
                 -- Get item quality color
                 local qualityColor = ITEM_QUALITY_COLORS[itemQuality or 1]
                 local r, g, b = 0.8, 0.8, 0.8 -- default color
                 if qualityColor then
                     r, g, b = qualityColor.r, qualityColor.g, qualityColor.b
                 end
-                
+
                 -- Build item name with forge/mythic indicators
                 local itemName = itemData.name
                 local indicators = {}
-                
+
                 -- Check if mythic
                 if itemData.id >= MYTHIC_MIN_ITEMID then
                     table.insert(indicators, "|cffFF6600[Mythic]|r")
                 end
-                
+
                 -- Check forge level
-                local forgeLevel = GetForgeLevelFromLink(itemData.link)
+                local forgeLevel = GetForgeLevelFromLink(itemData.link) -- Use itemData.link
                 if forgeLevel == FORGE_LEVEL_MAP.WARFORGED then
                     table.insert(indicators, "|cff9900FF[WF]|r")
                 elseif forgeLevel == FORGE_LEVEL_MAP.LIGHTFORGED then
@@ -1454,84 +1798,21 @@ if EquipAllButton then
                 elseif forgeLevel == FORGE_LEVEL_MAP.TITANFORGED then
                     table.insert(indicators, "|cff00CCFF[TF]|r")
                 end
-                
+
                 -- Combine name with indicators
                 local displayName = itemName
                 if #indicators > 0 then
                     displayName = displayName .. " " .. table.concat(indicators, " ")
                 end
-                
+
                 GameTooltip:AddLine(iconText .. displayName, r, g, b, true)
             end
         end
-        
+
         GameTooltip:Show()
-    end) 
+    end)
     EquipAllButton:SetScript("OnLeave", GameTooltip_Hide)
 end
-
--- Override the tooltip for the mini equip button to include icons
-AttuneHelperMiniEquipButton:SetScript("OnEnter", function(s)
-    GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
-    GameTooltip:SetText("Equip Attunables")
-    
-    local attunableData = GetAttunableItemNamesList()
-    local count = #attunableData
-
-    if count > 0 then
-        GameTooltip:AddLine(string.format("Qualifying Attunables (%d):", count), 1, 1, 0) -- Yellow text
-        for _, itemData in ipairs(attunableData) do
-            -- Get item info including quality and texture
-            local _, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(itemData.link)
-            local iconText = ""
-            
-            if itemTexture then
-                -- Create icon texture code (16x16 size)
-                iconText = string.format("|T%s:16:16:0:0|t ", itemTexture)
-            end
-            
-            -- Get item quality color
-            local qualityColor = ITEM_QUALITY_COLORS[itemQuality or 1]
-            local r, g, b = 0.8, 0.8, 0.8 -- default color
-            if qualityColor then
-                r, g, b = qualityColor.r, qualityColor.g, qualityColor.b
-            end
-            
-            -- Build item name with forge/mythic indicators
-            local itemName = itemData.name
-            local indicators = {}
-            
-            -- Check if mythic
-            if itemData.id >= MYTHIC_MIN_ITEMID then
-                table.insert(indicators, "|cffFF6600[Mythic]|r")
-            end
-            
-            -- Check forge level
-            local forgeLevel = GetForgeLevelFromLink(itemData.link)
-            if forgeLevel == FORGE_LEVEL_MAP.WARFORGED then
-                table.insert(indicators, "|cff9900FF[WF]|r")
-            elseif forgeLevel == FORGE_LEVEL_MAP.LIGHTFORGED then
-                table.insert(indicators, "|cffFFD700[LF]|r")
-            elseif forgeLevel == FORGE_LEVEL_MAP.TITANFORGED then
-                table.insert(indicators, "|cff00CCFF[TF]|r")
-            end
-            
-            -- Combine name with indicators
-            local displayName = itemName
-            if #indicators > 0 then
-                displayName = displayName .. " " .. table.concat(indicators, " ")
-            end
-            
-            -- Add the line with icon and colored item name
-            GameTooltip:AddLine(iconText .. displayName, r, g, b, true)
-        end
-    else
-        GameTooltip:AddLine("No qualifying attunables in bags.", 1, 0.5, 0.5, true) -- Reddish if none
-    end
-    
-    GameTooltip:Show()
-end)
-AttuneHelperMiniEquipButton:SetScript("OnLeave", GameTooltip_Hide)
 
 AttuneHelper_UpdateDisplayMode = function()
     if not AttuneHelperFrame or not AttuneHelperMiniFrame then return end
@@ -1553,12 +1834,27 @@ end
 
 SLASH_ATTUNEHELPER1="/ath" SlashCmdList["ATTUNEHELPER"]=function(msg)
     local cmd = msg:lower():match("^(%S*)")
-    if cmd=="reset"then AttuneHelper:ClearAllPoints() AttuneHelper:SetPoint("CENTER") AttuneHelperDB.FramePosition={"CENTER",UIParent,"CENTER",0,0} if AttuneHelperMiniFrame then AttuneHelperMiniFrame:ClearAllPoints() AttuneHelperMiniFrame:SetPoint("CENTER") AttuneHelperDB.MiniFramePosition={"CENTER",UIParent,"CENTER",0,0}end print("ATH: UI reset.")
+    if cmd=="reset"then
+        AttuneHelper:ClearAllPoints()
+        AttuneHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+        AttuneHelperDB.FramePosition={"CENTER", UIParent, "CENTER", 0, 0}
+        if AttuneHelperMiniFrame then
+            AttuneHelperMiniFrame:ClearAllPoints()
+            AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+            AttuneHelperDB.MiniFramePosition={"CENTER", UIParent, "CENTER", 0, 0}
+        end
     elseif cmd=="show"then if AttuneHelperDB["Mini Mode"]==1 and AttuneHelperMiniFrame then AttuneHelperMiniFrame:Show()else AttuneHelper:Show()end
     elseif cmd=="hide"then if AttuneHelperDB["Mini Mode"]==1 and AttuneHelperMiniFrame then AttuneHelperMiniFrame:Hide()else AttuneHelper:Hide()end
     elseif cmd=="sort"then local fn=SortInventoryButton and SortInventoryButton:GetScript("OnClick") if fn then fn()end
     elseif cmd=="equip"then local fn=EquipAllButton and EquipAllButton:GetScript("OnClick") if fn then fn()end
-    elseif cmd=="vendor"then local fn=VendorAttunedButton and VendorAttunedButton:GetScript("OnClick") if fn then fn()end
+    elseif cmd=="vendor"then
+        local buttonToClick = VendorAttunedButton
+        if AttuneHelperDB["Mini Mode"] == 1 and AttuneHelperMiniVendorButton then
+            buttonToClick = AttuneHelperMiniVendorButton
+        end
+        if buttonToClick and buttonToClick:GetScript("OnClick") then
+            buttonToClick:GetScript("OnClick")(buttonToClick) -- Pass the button itself as 'self'
+        end
     else print("/ath show|hide|reset|equip|sort|vendor")end
 end
 
@@ -1603,7 +1899,7 @@ SLASH_AHSET1="/AHSet" SlashCmdList["AHSET"]=function(msg)
           break
       end
   end
-  
+
   if not itemLinkPart or itemLinkPart == "" then
       print("|cffff0000[AttuneHelper]|r Usage: /ahset <itemlink> [mh|oh|SlotName|remove]")
       print("|cffff0000[AttuneHelper]|r SlotName examples: HeadSlot, Finger0Slot, Trinket1Slot")
@@ -1625,7 +1921,7 @@ SLASH_AHSET1="/AHSet" SlashCmdList["AHSET"]=function(msg)
       if AHSetList[itemName] then
           AHSetList[itemName] = nil
           print("|cffffd200[AttuneHelper]|r '" .. itemName .. "' removed from AHSet.")
-          for i=0,4 do UpdateBagCache(i) end 
+          for i=0,4 do UpdateBagCache(i) end
           UpdateItemCountText()
       else
           print("|cffffd200[AttuneHelper]|r '" .. itemName .. "' was not in AHSet.")
@@ -1636,11 +1932,11 @@ SLASH_AHSET1="/AHSet" SlashCmdList["AHSET"]=function(msg)
   local targetSlotName = nil
   local slotArgIsAliasOrDirect = false
 
-  if processedSlotArg ~= "" then 
-      if slotAliases and slotAliases[processedSlotArg] then 
+  if processedSlotArg ~= "" then
+      if slotAliases and slotAliases[processedSlotArg] then
           targetSlotName = slotAliases[processedSlotArg]
           slotArgIsAliasOrDirect = true
-      else 
+      else
           for _, validSlot in ipairs(allInventorySlots) do
               if string.lower(validSlot) == processedSlotArg then
                   targetSlotName = validSlot
@@ -1649,12 +1945,12 @@ SLASH_AHSET1="/AHSet" SlashCmdList["AHSET"]=function(msg)
               end
           end
       end
-      
-      if not slotArgIsAliasOrDirect then 
+
+      if not slotArgIsAliasOrDirect then
           print("|cffff0000[AttuneHelper]|r Invalid slot argument: '" .. slotArg .. "'. Use mh, oh, remove, or a valid slot name (e.g. HeadSlot, Finger0Slot).")
           return
       end
-  else 
+  else
       local weaponAndOffhandTypes = {
           INVTYPE_WEAPON = true, INVTYPE_2HWEAPON = true, INVTYPE_WEAPONMAINHAND = true, INVTYPE_WEAPONOFFHAND = true,
           INVTYPE_HOLDABLE = true, INVTYPE_SHIELD = true,
@@ -1677,7 +1973,7 @@ SLASH_AHSET1="/AHSet" SlashCmdList["AHSET"]=function(msg)
           end
       end
   end
-  
+
   if not targetSlotName then
       print("|cffff0000[AttuneHelper]|r Could not determine target slot for '" .. itemName .. "'. Logic error or unhandled case.")
       return
@@ -1697,25 +1993,25 @@ SLASH_AHSET1="/AHSet" SlashCmdList["AHSET"]=function(msg)
   elseif type(unifiedItemSlotsCheck) == "table" and tContains(unifiedItemSlotsCheck, targetSlotName) then
       isSuitable = true
   end
-  
+
   if not isSuitable then
       print("|cffff0000[AttuneHelper]|r Item '" .. itemName .. "' (type: "..itemEquipLoc..") is not suitable for the target slot: " .. targetSlotName)
       return
   end
-  
+
   local oldDesignation = AHSetList[itemName]
   if oldDesignation and oldDesignation ~= targetSlotName then
       print_debug_general("AHSet: "..itemName.." was previously set for "..tostring(oldDesignation)..", changing to "..targetSlotName)
   end
-  
+
   if AHSetList[itemName] == targetSlotName then
-      AHSetList[itemName] = nil 
+      AHSetList[itemName] = nil
       print("|cffffd200[AttuneHelper]|r '" .. itemName .. "' removed from AHSet for slot " .. targetSlotName .. ".")
   else
-      AHSetList[itemName] = targetSlotName 
+      AHSetList[itemName] = targetSlotName
       print("|cffffd200[AttuneHelper]|r '" .. itemName .. "' added to AHSet, designated for slot " .. targetSlotName .. ".")
   end
-  
+
   for i=0,4 do UpdateBagCache(i) end
   UpdateItemCountText()
 end
@@ -1736,31 +2032,10 @@ AttuneHelper:SetScript("OnEvent", function(s, e, a1)
         LoadAllSettings()
         s:UnregisterEvent("ADDON_LOADED")
     end
-    
+
     if e == "PLAYER_LOGIN" then
         s:UnregisterEvent("PLAYER_LOGIN")
         AH_wait(1, function()
-            if AttuneHelperMiniFrame and AttuneHelperDB.MiniFramePosition then
-                local pos = AttuneHelperDB.MiniFramePosition
-                -- Check if position data is valid and parent frame exists
-                if pos and #pos >= 5 and pos[1] and pos[3] and pos[4] ~= nil and pos[5] ~= nil then
-                    -- Validate that pos[2] is a valid frame reference
-                    if pos[2] == UIParent or (type(pos[2]) == "table" and pos[2].GetObjectType) then
-                        AttuneHelperMiniFrame:SetPoint(unpack(pos))
-                    else
-                        -- Reset to default if parent frame is invalid
-                        AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-                        AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
-                    end
-                else
-                    -- Reset to default if position data is invalid
-                    AttuneHelperMiniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-                    AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
-                end
-            end
-            if AttuneHelperDB.FramePosition then
-                AttuneHelper:SetPoint(unpack(AttuneHelperDB.FramePosition))
-            end
             LoadAllSettings()
         end)
         AH_wait(3, function()
