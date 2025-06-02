@@ -361,40 +361,46 @@ local function tContains(tbl, val) if type(tbl) ~= "table" then return false end
 local function IsWeaponTypeForOffHandCheck(eL) return eL=="INVTYPE_WEAPON" or eL=="INVTYPE_WEAPONMAINHAND" or eL=="INVTYPE_WEAPONOFFHAND" end
 
 local function UpdateBagCache(bagID)
-  local old_bag_records = bagSlotCache[bagID]
-  if old_bag_records then
-    for _, rec_to_remove in pairs(old_bag_records) do
-      local raw_inv_type = rec_to_remove.equipSlot local unified_keys = itemTypeToUnifiedSlot[raw_inv_type]
-      if unified_keys then
-        if type(unified_keys) == "string" then local list = equipSlotCache[unified_keys] if list then for i=#list,1,-1 do if list[i]==rec_to_remove then table.remove(list,i) end end end
-        elseif type(unified_keys) == "table" then for _, k_name in ipairs(unified_keys) do local list = equipSlotCache[k_name] if list then for i=#list,1,-1 do if list[i]==rec_to_remove then table.remove(list,i) end end end end end
+    -- Skip bank bags (bags 5-11 are bank slots in 3.3.5a)
+    if bagID >= 5 then
+      print_debug_general("UpdateBagCache: Skipping bank bag " .. bagID)
+      return
+    end
+    
+    local old_bag_records = bagSlotCache[bagID]
+    if old_bag_records then
+      for _, rec_to_remove in pairs(old_bag_records) do
+        local raw_inv_type = rec_to_remove.equipSlot local unified_keys = itemTypeToUnifiedSlot[raw_inv_type]
+        if unified_keys then
+          if type(unified_keys) == "string" then local list = equipSlotCache[unified_keys] if list then for i=#list,1,-1 do if list[i]==rec_to_remove then table.remove(list,i) end end end
+          elseif type(unified_keys) == "table" then for _, k_name in ipairs(unified_keys) do local list = equipSlotCache[k_name] if list then for i=#list,1,-1 do if list[i]==rec_to_remove then table.remove(list,i) end end end end end
+        end
       end
     end
-  end
-  bagSlotCache[bagID] = {}
-  for slotID=1,GetContainerNumSlots(bagID) do local link=GetContainerItemLink(bagID,slotID)
-    if link then local name,_,_,_,_,_,_,_,eSlot_raw = GetItemInfo(link)
-      if eSlot_raw and eSlot_raw~="" then local unifiedNames=itemTypeToUnifiedSlot[eSlot_raw]
-        if unifiedNames then
-          local itemID=GetItemIDFromLink(link)
-          local canPlayerAttune = false
-          if itemID then
-              if _G.CanAttuneItemHelper then
-                  local attuneHelperResult = CanAttuneItemHelper(itemID)
-                  print_debug_general("UpdateBagCache: Item ".. (name or link) .. " ID:"..itemID.." CanAttuneItemHelper result: " .. tostring(attuneHelperResult))
-                  canPlayerAttune = (attuneHelperResult == 1)
-              end
-          end
-          local inSet=(AHSetList[name] ~= nil)
-          if canPlayerAttune or inSet then local rec={bag=bagID,slot=slotID,link=link,name=name,equipSlot=eSlot_raw,isAttunable=canPlayerAttune,inSet=inSet} bagSlotCache[bagID][slotID]=rec
-            if type(unifiedNames)=="string" then local k=unifiedNames equipSlotCache[k]=equipSlotCache[k] or {} table.insert(equipSlotCache[k],rec)
-            elseif type(unifiedNames)=="table" then for _,k in ipairs(unifiedNames) do equipSlotCache[k]=equipSlotCache[k] or {} table.insert(equipSlotCache[k],rec) end end
+    bagSlotCache[bagID] = {}
+    for slotID=1,GetContainerNumSlots(bagID) do local link=GetContainerItemLink(bagID,slotID)
+      if link then local name,_,_,_,_,_,_,_,eSlot_raw = GetItemInfo(link)
+        if eSlot_raw and eSlot_raw~="" then local unifiedNames=itemTypeToUnifiedSlot[eSlot_raw]
+          if unifiedNames then
+            local itemID=GetItemIDFromLink(link)
+            local canPlayerAttune = false
+            if itemID then
+                if _G.CanAttuneItemHelper then
+                    local attuneHelperResult = CanAttuneItemHelper(itemID)
+                    print_debug_general("UpdateBagCache: Item ".. (name or link) .. " ID:"..itemID.." CanAttuneItemHelper result: " .. tostring(attuneHelperResult))
+                    canPlayerAttune = (attuneHelperResult == 1)
+                end
+            end
+            local inSet=(AHSetList[name] ~= nil)
+            if canPlayerAttune or inSet then local rec={bag=bagID,slot=slotID,link=link,name=name,equipSlot=eSlot_raw,isAttunable=canPlayerAttune,inSet=inSet} bagSlotCache[bagID][slotID]=rec
+              if type(unifiedNames)=="string" then local k=unifiedNames equipSlotCache[k]=equipSlotCache[k] or {} table.insert(equipSlotCache[k],rec)
+              elseif type(unifiedNames)=="table" then for _,k in ipairs(unifiedNames) do equipSlotCache[k]=equipSlotCache[k] or {} table.insert(equipSlotCache[k],rec) end end
+            end
           end
         end
       end
     end
   end
-end
 
 local function ApplyButtonTheme(theme) if not themePaths[theme] then return end if AttuneHelperFrame and AttuneHelperFrame:IsShown() then local btns={_G.AttuneHelperSortInventoryButton,_G.AttuneHelperEquipAllButton,_G.AttuneHelperVendorAttunedButton} for _,b in ipairs(btns) do if b then b:SetNormalTexture(themePaths[theme].normal) b:SetPushedTexture(themePaths[theme].pushed) b:SetHighlightTexture(themePaths[theme].pushed,"ADD") end end end end
 local function AH_wait(delay,func,...)
@@ -782,12 +788,17 @@ EquipAllButton = CreateButton("AttuneHelperEquipAllButton",AttuneHelper,"Equip A
 EquipAllButton:SetScript("OnClick", function()
     print_debug_general("EquipAllButton clicked. EquipNewAffixesOnly=" .. tostring(AttuneHelperDB["EquipNewAffixesOnly"]))
     if MerchantFrame and MerchantFrame:IsShown() then print_debug_general("Merchant frame open, aborting equip.") return end
+    
+    -- Only update cache for regular bags (0-4), not bank
     for bag = 0, 4 do UpdateBagCache(bag) end
     UpdateItemCountText()
     print_debug_general("Bag cache updated. Current Attunable Item Count (for display): " .. currentAttunableItemCount)
 
     local slotsList = {"HeadSlot","NeckSlot","ShoulderSlot","BackSlot","ChestSlot","WristSlot","HandsSlot","WaistSlot","LegsSlot","FeetSlot","Finger0Slot","Finger1Slot","Trinket0Slot","Trinket1Slot","MainHandSlot","SecondaryHandSlot","RangedSlot"}
     local twoHanderEquippedInMainHandThisEquipCycle = false
+
+    -- Determine throttle based on combat status
+    local equipThrottle = InCombatLockdown() and 0.05 or SWAP_THROTTLE -- Faster in combat
 
     local willBindScannerTooltip = nil
     local function IsBoEAndNotBound(itemLink, itemBag, itemSlotInBag)
@@ -1066,7 +1077,9 @@ EquipAllButton:SetScript("OnClick", function()
         end
         print_debug_ahset(slotName, "--- Finished all checks for slot --- No item equipped for this slot if this is the last message for it.")
     end
-    for i, slotName_iter in ipairs(slotsList) do AH_wait(SWAP_THROTTLE * i, checkAndEquip, slotName_iter) end
+    
+    -- Use the appropriate throttle based on combat status
+    for i, slotName_iter in ipairs(slotsList) do AH_wait(equipThrottle * i, checkAndEquip, slotName_iter) end
 end)
 
 SortInventoryButton = CreateButton("AttuneHelperSortInventoryButton",AttuneHelper,"Prepare Disenchant",EquipAllButton,"BOTTOM",0,-27,nil,nil,nil,1.3)
@@ -2040,6 +2053,7 @@ AttuneHelper:SetScript("OnEvent", function(s, e, a1)
         end)
         AH_wait(3, function()
             synEXTloaded = true
+            -- Only update regular bags, not bank
             for b = 0, 4 do
                 UpdateBagCache(b)
             end
@@ -2049,20 +2063,33 @@ AttuneHelper:SetScript("OnEvent", function(s, e, a1)
         if not synEXTloaded then
             return
         end
-        UpdateBagCache(a1)
-        UpdateItemCountText()
+        -- Only update regular bags (0-4), skip bank bags (5+)
+        if a1 <= 4 then
+            UpdateBagCache(a1)
+            UpdateItemCountText()
+        end
+        
         local nT = GetTime()
         if nT - (deltaTime or 0) < CHAT_MSG_SYSTEM_THROTTLE then
             return
         end
         deltaTime = nT
-        if AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 and not InCombatLockdown() then
+        
+        -- Auto-equip logic for both in and out of combat
+        if AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 then
             local fn = EquipAllButton:GetScript("OnClick")
             if fn then
-                AH_wait(0.2, fn)
+                if InCombatLockdown() then
+                    -- In combat - equip immediately with shorter delay
+                    AH_wait(0.1, fn)
+                else
+                    -- Out of combat - use normal delay
+                    AH_wait(0.2, fn)
+                end
             end
         end
     elseif e == "PLAYER_REGEN_ENABLED" and AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 then
+        -- When leaving combat, do a full equip cycle
         local fn = EquipAllButton:GetScript("OnClick")
         if fn then
             AH_wait(0.2, fn)
@@ -2075,6 +2102,7 @@ AttuneHelper:SetScript("OnEvent", function(s, e, a1)
         lastAttemptedItemTypeForEquip = nil
     end
 end)
+
 SLASH_AHIGNORELIST1="/ahignorelist" SlashCmdList["AHIGNORELIST"]=function()local c=0 print("|cffffd200[AH]|r Ignored:") for n,enable_flag in pairs(AHIgnoreList)do if enable_flag then print("- "..n) c=c+1 end end if c==0 then print("|cffffd200[AH]|r No ignored items.")end end
 SLASH_AHBL1="/ahbl" SlashCmdList["AHBL"]=function(m)local k=m:lower():match("^(%S*)") local sV=slotAliases[k] if not sV then print("|cffff0000[AH]|r Usage: /ahbl <slot_keyword> [...]") return end AttuneHelperDB[sV]=1-(AttuneHelperDB[sV]or 0) print(string.format("|cffffd200[AH]|r %s %s.",sV,(AttuneHelperDB[sV]==1 and"blacklisted"or"unblacklisted"))) local cb=_G["AttuneHelperBlacklist_"..sV.."Checkbox"] if cb and cb.SetChecked then cb:SetChecked(AttuneHelperDB[sV]==1)end end
 SLASH_AHBLL1="/ahbll" SlashCmdList["AHBLL"]=function()local f=false print("|cffffd200[AH]|r Blacklisted Slots:") for _,sN in ipairs(slots)do if AttuneHelperDB[sN]==1 then print("- "..sN) f=true end end if not f then print("|cffffd200[AH]|r No blacklisted slots.")end end
