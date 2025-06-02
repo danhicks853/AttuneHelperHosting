@@ -110,6 +110,8 @@ local function GetForgeLevelFromLink(itemLink)
     return FORGE_LEVEL_MAP.BASE -- Default if API not present or returns unexpected value
 end
 
+
+
 -- This converts a FORGE_LEVEL_MAP style value (0,1,2,3) into the 0,1,2,3 param expected by 3-param GetItemAttuneProgress API.
 -- This is mainly for fallback or if other systems need this specific format.
 local function ConvertForgeMapToApiParam(forgeLevelMapValue)
@@ -401,6 +403,15 @@ local function UpdateBagCache(bagID)
       end
     end
   end
+  
+  local function RefreshAllBagCaches()
+    if not synEXTloaded then return end
+    print_debug_general("RefreshAllBagCaches: Forcing refresh of all bag caches")
+    for b = 0, 4 do
+        UpdateBagCache(b)
+    end
+    UpdateItemCountText()
+end
 
 local function ApplyButtonTheme(theme) if not themePaths[theme] then return end if AttuneHelperFrame and AttuneHelperFrame:IsShown() then local btns={_G.AttuneHelperSortInventoryButton,_G.AttuneHelperEquipAllButton,_G.AttuneHelperVendorAttunedButton} for _,b in ipairs(btns) do if b then b:SetNormalTexture(themePaths[theme].normal) b:SetPushedTexture(themePaths[theme].pushed) b:SetHighlightTexture(themePaths[theme].pushed,"ADD") end end end end
 local function AH_wait(delay,func,...)
@@ -789,10 +800,9 @@ EquipAllButton:SetScript("OnClick", function()
     print_debug_general("EquipAllButton clicked. EquipNewAffixesOnly=" .. tostring(AttuneHelperDB["EquipNewAffixesOnly"]))
     if MerchantFrame and MerchantFrame:IsShown() then print_debug_general("Merchant frame open, aborting equip.") return end
     
-    -- Only update cache for regular bags (0-4), not bank
-    for bag = 0, 4 do UpdateBagCache(bag) end
-    UpdateItemCountText()
-    print_debug_general("Bag cache updated. Current Attunable Item Count (for display): " .. currentAttunableItemCount)
+    -- Force refresh all bag caches to catch any missed updates
+    RefreshAllBagCaches()
+    print_debug_general("Bag cache refreshed. Current Attunable Item Count (for display): " .. currentAttunableItemCount)
 
     local slotsList = {"HeadSlot","NeckSlot","ShoulderSlot","BackSlot","ChestSlot","WristSlot","HandsSlot","WaistSlot","LegsSlot","FeetSlot","Finger0Slot","Finger1Slot","Trinket0Slot","Trinket1Slot","MainHandSlot","SecondaryHandSlot","RangedSlot"}
     local twoHanderEquippedInMainHandThisEquipCycle = false
@@ -800,6 +810,7 @@ EquipAllButton:SetScript("OnClick", function()
     -- Determine throttle based on combat status
     local equipThrottle = InCombatLockdown() and 0.05 or SWAP_THROTTLE -- Faster in combat
 
+    -- [Rest of the function remains the same...]
     local willBindScannerTooltip = nil
     local function IsBoEAndNotBound(itemLink, itemBag, itemSlotInBag)
         if not itemLink then return false end
@@ -2034,7 +2045,12 @@ SLASH_AHTOGGLE1="/ahtoggle" SlashCmdList["AHTOGGLE"]=function()AttuneHelperDB["A
 SLASH_AHSETLIST1="/ahsetlist" SlashCmdList["AHSETLIST"]=function()local c=0 print("|cffffd200[AH]|r AHSetList Items:") for n,s_val in pairs(AHSetList)do if s_val then print("- "..n .. " (Slot: " .. tostring(s_val) .. ")") c=c+1 end end if c==0 then print("|cffffd200[AH]|r No items in AHSetList.")end end
 -- local merchF=CreateFrame("Frame") merchF:RegisterEvent("MERCHANT_SHOW") merchF:RegisterEvent("MERCHANT_UPDATE") merchF:SetScript("OnEvent",function(_,e)if e=="MERCHANT_SHOW"or e=="MERCHANT_UPDATE"then for i=1,GetNumBuybackItems()do local l=GetBuybackItemLink(i) if l then local n=GetItemInfo(l) if AHIgnoreList[n]or AHSetList[n]then BuybackItem(i) print("|cffff0000[AH]|r Bought back: "..n) return end end end end end)
 
-AttuneHelper:RegisterEvent("ADDON_LOADED") AttuneHelper:RegisterEvent("PLAYER_REGEN_DISABLED") AttuneHelper:RegisterEvent("PLAYER_REGEN_ENABLED") AttuneHelper:RegisterEvent("PLAYER_LOGIN") AttuneHelper:RegisterEvent("BAG_UPDATE") AttuneHelper:RegisterEvent("UI_ERROR_MESSAGE")
+AttuneHelper:RegisterEvent("ADDON_LOADED") AttuneHelper:RegisterEvent("PLAYER_REGEN_DISABLED") AttuneHelper:RegisterEvent("PLAYER_REGEN_ENABLED") AttuneHelper:RegisterEvent("PLAYER_LOGIN") AttuneHelper:RegisterEvent("BAG_UPDATE") AttuneHelper:RegisterEvent("UI_ERROR_MESSAGE") 
+AttuneHelper:RegisterEvent("QUEST_COMPLETE")
+AttuneHelper:RegisterEvent("QUEST_TURNED_IN") 
+AttuneHelper:RegisterEvent("LOOT_CLOSED")
+AttuneHelper:RegisterEvent("ITEM_PUSH")
+
 AttuneHelper:SetScript("OnEvent", function(s, e, a1)
     if e == "ADDON_LOADED" and a1 == "AttuneHelper" then
         InitializeDefaultSettings()
@@ -2088,12 +2104,52 @@ AttuneHelper:SetScript("OnEvent", function(s, e, a1)
                 end
             end
         end
+    elseif e == "QUEST_COMPLETE" or e == "QUEST_TURNED_IN" then
+        -- Quest rewards might not trigger BAG_UPDATE immediately
+        print_debug_general("Quest event detected: " .. e .. ". Scheduling bag cache refresh.")
+        AH_wait(0.5, function()
+            RefreshAllBagCaches()
+            if AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 then
+                local fn = EquipAllButton:GetScript("OnClick")
+                if fn then
+                    AH_wait(0.2, fn)
+                end
+            end
+        end)
+    elseif e == "LOOT_CLOSED" then
+        -- Sometimes loot doesn't trigger BAG_UPDATE properly
+        print_debug_general("Loot closed. Scheduling bag cache refresh.")
+        AH_wait(0.3, function()
+            RefreshAllBagCaches()
+            if AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 then
+                local fn = EquipAllButton:GetScript("OnClick")
+                if fn then
+                    AH_wait(0.2, fn)
+                end
+            end
+        end)
+    elseif e == "ITEM_PUSH" then
+        -- Item push events for items being added to bags
+        print_debug_general("Item push event detected. Scheduling bag cache refresh.")
+        AH_wait(0.2, function()
+            RefreshAllBagCaches()
+            if AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 then
+                local fn = EquipAllButton:GetScript("OnClick")
+                if fn then
+                    AH_wait(0.1, fn)
+                end
+            end
+        end)
     elseif e == "PLAYER_REGEN_ENABLED" and AttuneHelperDB["Auto Equip Attunable After Combat"] == 1 then
-        -- When leaving combat, do a full equip cycle
-        local fn = EquipAllButton:GetScript("OnClick")
-        if fn then
-            AH_wait(0.2, fn)
-        end
+        -- When leaving combat, do a full equip cycle with fresh cache
+        print_debug_general("Left combat. Refreshing cache and equipping.")
+        AH_wait(0.2, function()
+            RefreshAllBagCaches()
+            local fn = EquipAllButton:GetScript("OnClick")
+            if fn then
+                fn()
+            end
+        end)
     elseif e == "UI_ERROR_MESSAGE" and a1 == ERR_ITEM_CANNOT_BE_EQUIPPED then
         if lastAttemptedSlotForEquip == "SecondaryHandSlot" and IsWeaponTypeForOffHandCheck(lastAttemptedItemTypeForEquip) then
             cannotEquipOffHandWeaponThisSession = true
