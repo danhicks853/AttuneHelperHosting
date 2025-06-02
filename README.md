@@ -1,81 +1,167 @@
-# AttuneHelper Addon Documentation
+# 🌟 AttuneHelper
 
-AttuneHelper is a World of Warcraft addon designed to assist players with managing and equipping "attunable" items (items that can be leveled up via a custom server mechanic) and their main "AHSet" gear.
+Your one-stop World of Warcraft addon for managing attunable gear—items that **level up**, **AHSet** a powerful gear preset to automagicly set your gearset back to main gear as long as you set it with /ahset ItemLink, slot blacklisting, forge-level filtering, quick vendoring, and a fully customizable UI!
 
-## Features
+---
 
-* Automated equipping of attunable items for leveling.
-* Fallback to equipping main AHSet gear.
-* Item blacklisting per slot.
-* BoE (Bind on Equip) and Mythic item handling policies for auto-equipping.
-* Forge type filtering for auto-equipping.
-* Quick vendoring of "attuned" (fully leveled) or unwanted items.
-* Inventory sorting helper for disenchanting Mythic items.
-* Customizable UI elements.
+## 📖 Overview
 
-## Slash Commands
-All commands are case-insensitive.
-### Item Lists Management
+AttuneHelper streamlines your loot life by automatically:
 
-* `/AHIgnore <itemlink>`
-    * **Description:** Toggles the specified item's presence in the AHIgnoreList. Ignored items are protected from certain addon actions like automatic vendoring and may be handled differently by sorting.
-    * **Usage:** Drag an item from your inventory onto the chat input line after typing the command, then press Enter.
-    * **Example:** `/AHIgnore [Item Link]`
-    * **Feedback:** Prints a confirmation message indicating whether the item is now ignored or no longer ignored.
+1. Equipping items you’re **currently leveling** (“attunable” items)  
+2. Falling back to your **AHSet** (your favorite, fully-powered gear)  
+3. Enforcing slot blacklists, BoE/Mythic policies, and **forge**-level filters  
+4. Quick-selling fully attuned or unwanted items at a vendor  
+5. Sorting your bags to isolate Mythic items for disenchanting  
 
-* `/AHSet <itemlink>`
-    * **Description:** Toggles the specified item's presence in the AHSetList. AHSet items are considered your primary, fully-powered gear. The addon will prioritize equipping items for leveling over AHSet items, and use AHSet items as a fallback.
-    * **Restrictions:** Only allows armor, jewelry, and specific non-weapon ranged slot items (wands, relics, thrown) to be added.
-    * **Usage:** Drag an item from your inventory onto the chat input line after typing the command, then press Enter.
-    * **Example:** `/AHSet [Item Link]`
-    * **Feedback:** Prints a confirmation message indicating whether the item has been added to or removed from the set items.
+Plus—choose from multiple backgrounds, colors, button themes, and even a **Mini Mode** toolbar! 🎨
 
-* `/ahignorelist`
-    * **Description:** Displays a list of all items currently in your AHIgnoreList in the chat window.
+---
 
-* `/ahsetlist`
-    * **Description:** Displays a list of all items currently in your AHSetList in the chat window.
+## 📦 Installation
 
-### Equipment Slot Blacklisting
+1. Download the `AttuneHelper` addon folder.  
+2. Copy it into your WoW AddOns directory:
 
-* `/ahbl <slot_keyword>`
-    * **Description:** Toggles the blacklist status for a specified equipment slot. If a slot is blacklisted, AttuneHelper will not attempt to auto-equip items into it.
-    * **Usage:** `/ahbl keyword`
-    * **Valid Keywords:**
-        * `head`, `neck`, `shoulder`, `back`, `chest`
-        * `wrist`, `hands`, `waist`, `legs` (or `pants`)
-        * `feet`, `finger1` (or `ring1`), `finger2` (or `ring2`)
-        * `trinket1`, `trinket2`, `mh` (or `mainhand`)
-        * `oh` (or `offhand`), `ranged`
-    * **Example:** `/ahbl head` (toggles blacklisting for the HeadSlot)
-    * **Feedback:** Prints a confirmation message and updates the corresponding checkbox in the addon's options panel.
+   ```
+   Synastria/Interface/AddOns/
+   ```
 
-* `/ahbll`
-    * **Description:** Displays a list of all currently blacklisted equipment slots in the chat window.
+3. Launch (or `/reload`) WoW.    
 
-### Settings Toggles
+---
 
-* `/ahtoggle`
-    * **Description:** Toggles the "Auto Equip Attunable After Combat" setting. If enabled, the addon will attempt to run its equipping logic automatically after you leave combat and your health/mana regenerates.
-    * **Feedback:** Prints a confirmation message and updates the corresponding checkbox in the addon's options panel.
+## 🚀 Key Features
 
-## Configuration Panel
+- ⚔️ **Automated Attunement**  
+  - Finds bag items with attunement progress < 100% and equips them in priority order.  
+  - Honors “Equip New Affixes Only” if you only want **fresh variants**.  
 
-AttuneHelper also provides a graphical configuration panel within the game's Interface Options (usually accessible via Escape > Interface > AddOns > AttuneHelper). Here you can configure:
+- 🛡️ **AHSet Fallback**  
+  - Use `/AHSet <itemlink> [slot]` to designate your main gear.  
 
-* **Blacklisting:** Checkboxes for each equipment slot.
-* **General Options:**
-    * Sell Attuned Mythic Gear?
-    * Auto Equip Attunable After Combat
-    * Do Not Sell BoE Items
-    * Limit Selling to 12 Items?
-    * Disable Auto-Equip Mythic BoE (for items that will bind on equip)
-    * Equip BoE Bountied Items (for items that are BoE, have a bounty, and the setting is enabled)
-* **Forge Equipping:** Select which item forge levels (Base, Titanforged, Warforged, Lightforged) are permissible for auto-equipping.
-* **Appearance:**
-    * Background Style for the main window.
-    * Background Color and Transparency.
-    * Button Theme for the main window buttons.
+- 🚫 **Slot Blacklisting**  
+  - Prevent auto-equip in any slot via `/ahbl <slot>` or the UI checkboxes.  
 
-Changes made in the options panel are saved automatically.
+- 🔥 **Forge Level Filtering**  
+  - Allow/disallow Base, Titanforged, Warforged, Lightforged items.  
 
+- 🏷️ **BoE & Mythic Policies**  
+  - Control auto-equip of Bind-on-Equip or Mythic BoE items.  
+
+- 💰 **Quick Vendoring**  
+  - Bulk-sell fully attuned or unwanted items at a merchant with one click.  
+
+- 🗂️ **Inventory Sorting**  
+  - Moves Mythic items to Bag 0, prepping them for disenchant or sale.  
+
+- 🎨 **Customizable UI**  
+  - Background styles, colors, alpha slider, button themes, and **Mini Mode**.  
+
+---
+
+## 🎮 Slash Commands
+
+### Main Controller: `/ath`
+```text
+/ath reset      — Reset frames to center
+/ath show       — Show the addon window
+/ath hide       — Hide the addon window
+/ath equip      — Run auto-equip now
+/ath sort       — Prepare Mythic items for disenchant
+/ath vendor     — Vendor attuned/unwanted items (must have merchant open)
+```
+
+### Ignore List
+```text
+/AHIgnore <itemlink>    — Toggle item in “ignore” list  
+/ahignorelist           — List all ignored items in chat
+```
+
+### AHSet (Fallback Gear)
+```text
+/AHSet <itemlink> [slot|remove]   — Toggle item in AHSetList  
+/ahsetlist                        — List all AHSet items
+```
+- **slot** can be `mh`/`oh` or exact slot names (`HeadSlot`, `Finger1Slot`, etc.).  
+- Use `remove` to clear it from AHSetList.
+
+### Slot Blacklisting
+```text
+/ahbl <slot_keyword>   — Toggle auto-equip on specific slot  
+/ahbll                 — List all blacklisted slots
+```
+Valid `slot_keyword` examples:  
+`head`, `neck`, `shoulder`, `back`, `chest`,  
+`wrist`, `hands`, `waist`, `legs` (or `pants`),  
+`feet`, `finger1`/`ring1`, `finger2`/`ring2`,  
+`trinket1`, `trinket2`, `mh`/`mainhand`,  
+`oh`/`offhand`, `ranged`.
+
+### Misc Toggles
+```text
+/ahtoggle    — Toggle Auto-Equip After Combat  
+/ah2h        — Enable/Disable equipping two-handers  
+```
+
+---
+
+## ⚙️ Configuration Panel
+
+Open **Esc → Interface → AddOns → AttuneHelper**.
+
+### 🎛️ General Logic
+- Sell Attuned Mythic Gear?  
+- Auto-Equip Attunable After Combat  
+- Do Not Sell BoE Items  
+- Limit Selling to 12 Items  
+- Disable Auto-Equip for Mythic BoE  
+- Equip BoE Bountied Items  
+- Equip New Affixes Only  
+
+### 🔒 Blacklisting
+✔️ Checkboxes for each equipment slot to disable auto-equip.
+
+### 🔥 Forge Equipping
+Allowed Forge Types:
+- [ ] Base Items  
+- [ ] Titanforged  
+- [ ] Warforged  
+- [ ] Lightforged  
+
+### 🎨 Theme Settings
+- **Background Style** (Tooltip, Guild, Atunament, Always Bee Attunin’, MiniMode)  
+- **Background Color & Alpha** with picker & slider  
+- **Button Theme** (Normal, Blue, Grey)  
+- **Mini Mode** toggle  
+
+> All changes auto-save when you click a checkbox or dropdown.
+
+---
+
+## 🖼️ Mini Mode
+
+A compact, draggable toolbar:
+
+todo put picture here
+
+- Hover icons for detailed tooltips with item icons, forge/mythic indicators, and attunement progress.  
+- Toggle via the **Mini Mode** checkbox in Theme Settings or `/ath show`/`hide`.
+
+---
+
+## 🛠️ Development & Contributing
+
+- **Data Structures**
+  ```lua
+  AttuneHelperDB              — User settings (positions, colors, toggles…)
+  AHIgnoreList[itemName]      — Items to ignore (no vendoring/equip)
+  AHSetList[itemName]         — Your primary fallback gear
+  AttuneHelperDB.AllowedForgeTypes — Table of allowed forge levels
+  ```
+
+- **Contributions**
+  - Fork & pull-request on GitHub  
+  - Report issues with reproduction steps and any lua errors  
+
+---
