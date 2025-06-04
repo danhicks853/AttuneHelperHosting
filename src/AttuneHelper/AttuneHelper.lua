@@ -276,8 +276,6 @@ local function ItemQualifiesForBagEquip(itemId, itemLink, isEquipNewAffixesOnlyE
     end
 end
 
-<<<<<<< Updated upstream
-=======
 -- Helper function to check if all forge types are disabled
 local function AreAllForgeTypesDisabled()
     local allowedTypes = AttuneHelperDB.AllowedForgeTypes or {}
@@ -309,7 +307,6 @@ local function GetBlacklistedSlotNames()
     return blacklisted
 end
 
->>>>>>> Stashed changes
 -- Helper: Compare two items to determine which should be equipped first
 -- Returns true if item1 should be prioritized over item2
 local function ShouldPrioritizeItem(item1Link, item2Link)
@@ -462,14 +459,6 @@ local function GetAttunableItemNamesList()
                     if rec and rec.isAttunable then
                         local itemId = GetItemIDFromLink(rec.link)
                         if itemId then
-<<<<<<< Updated upstream
-                            if ItemQualifiesForBagEquip(itemId, rec.link, isStrictEquip) then
-                                table.insert(itemData, {
-                                    name = rec.name or "Unknown Item",
-                                    link = rec.link,
-                                    id = itemId
-                                })
-=======
                             -- First check if it qualifies for bag equip (attunement logic)
                             if ItemQualifiesForBagEquip(itemId, rec.link, isStrictEquip) then
                                 -- NOW also check if it passes the policy check (forge types, BoE, etc.)
@@ -494,7 +483,6 @@ local function GetAttunableItemNamesList()
                                         id = itemId
                                     })
                                 end
->>>>>>> Stashed changes
                             end
                         end
                     end
@@ -503,11 +491,7 @@ local function GetAttunableItemNamesList()
         end
     end
     return itemData
-<<<<<<< Updated upstream
-  end
-=======
 end
->>>>>>> Stashed changes
 
 local function InitializeDefaultSettings()
     if AttuneHelperDB["Background Style"]==nil then AttuneHelperDB["Background Style"]="Tooltip" end
@@ -1032,11 +1016,7 @@ EquipAllButton:SetScript("OnClick", function()
             if itemIsBoENotBound and isBountied then
                 if AttuneHelperDB["Equip BoE Bountied Items"] ~= 1 then print_debug_general("PolicyCheck Fail (BoE Bountied not allowed): " .. itemLink) return false end
             else
-<<<<<<< Updated upstream
-                local isMythic = (itemId >= MYTHIC_MIN_ITEMID)
-=======
                 local isMythic = IsMythic(itemId)
->>>>>>> Stashed changes
                 if AttuneHelperDB["Disable Auto-Equip Mythic BoE"] == 1 and isMythic and itemIsBoENotBound then print_debug_general("PolicyCheck Fail (Mythic BoE disabled): " .. itemLink) return false end
             end
         elseif itemIsBoENotBound then
@@ -1297,38 +1277,13 @@ SortInventoryButton = CreateButton("AttuneHelperSortInventoryButton",AttuneHelpe
 SortInventoryButton:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_RIGHT") GameTooltip:SetText("Moves Mythic items to Bag 0.") GameTooltip:Show() end)
 SortInventoryButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 SortInventoryButton:SetScript("OnClick", function()
-<<<<<<< Updated upstream
-    local bagZ, mythic, ignoredM, emptyS, ignoredL = {}, {}, {}, {}, {}
-=======
     local readyForDisenchant, emptyS, ignoredL = {}, {}, {}
->>>>>>> Stashed changes
 
     -- Build ignored list (case-insensitive)
     for n in pairs(AHIgnoreList) do
         ignoredL[string.lower(n)] = true
     end
 
-<<<<<<< Updated upstream
-    -- Improved mythic detection function
-    local function IsMythic(id)
-        if not id then return false end
-
-        -- First check: ID-based detection for known mythic range
-        if id >= MYTHIC_MIN_ITEMID then return true end
-
-        -- Second check: Tooltip scanning for "Mythic" text
-        local tt = CreateFrame("GameTooltip", "AttuneHelperMythicScanTooltip", nil, "GameTooltipTemplate")
-        tt:SetOwner(UIParent, "ANCHOR_NONE")
-        tt:SetHyperlink("item:" .. id)
-
-        for i = 1, tt:NumLines() do
-            local line = _G["AttuneHelperMythicScanTooltipTextLeft" .. i]
-            if line then
-                local text = line:GetText()
-                if text and string.find(text, "Mythic", 1, true) then
-                    tt:Hide()
-                    return true
-=======
     -- Determine which bags to scan
     local bagsToScan = {0, 1, 2, 3, 4} -- Always include regular bags
     local includeBankBags = false
@@ -1382,387 +1337,11 @@ SortInventoryButton:SetScript("OnClick", function()
                 if text and string.find(text, "Soulbound", 1, true) then
                     isSoulbound = true
                     break
->>>>>>> Stashed changes
                 end
             end
         end
         boundScanTT:Hide()
 
-<<<<<<< Updated upstream
-        tt:Hide()
-        return false
-    end
-
-    -- Check for enough empty slots
-    local emptyCount = 0
-    for b = 0, 4 do
-        for s = 1, GetContainerNumSlots(b) do
-            if not GetContainerItemID(b, s) then
-                emptyCount = emptyCount + 1
-            end
-        end
-    end
-
-    if emptyCount < 16 then
-        print("|cffff0000[Attune Helper]|r: Need at least 16 empty slots for sorting.")
-        return
-    end
-
-    -- Clear tables
-    wipe(emptyS)
-    wipe(bagZ)
-    wipe(mythic)
-    wipe(ignoredM)
-
-    -- Track which slots in bag 0 will become available
-    local availableBag0Slots = {}
-
-    -- Scan all bags and categorize items
-    for b = 0, 4 do
-        for s = 1, GetContainerNumSlots(b) do
-            local id = GetContainerItemID(b, s)
-            if id then
-                local name = GetItemInfo(id)
-                local isMythicItem = IsMythic(id)
-                local isIgnored = false
-
-                if type(name) == "string" and name ~= "" then
-                    isIgnored = ignoredL[string.lower(name)]
-                end
-
-                if b == 0 then
-                    -- Items currently in bag 0
-                    if not isMythicItem then
-                        -- Non-mythic items in bag 0 (need to move out)
-                        table.insert(bagZ, {b = b, s = s, id = id, name = name})
-                        table.insert(availableBag0Slots, s) -- This slot will become available
-                    elseif isIgnored then
-                        -- Ignored mythic items in bag 0 (need to move out)
-                        table.insert(ignoredM, {b = b, s = s, id = id, name = name})
-                        table.insert(availableBag0Slots, s) -- This slot will become available
-                    else
-                        -- Mythic items already in bag 0 (leave them)
-                        table.insert(mythic, {b = b, s = s, id = id, name = name, alreadyInBag0 = true})
-                    end
-                else
-                    -- Items in other bags
-                    if isMythicItem and not isIgnored then
-                        -- Mythic items in other bags (need to move to bag 0)
-                        table.insert(mythic, {b = b, s = s, id = id, name = name})
-                    else
-                        -- Non-mythic or ignored items in other bags
-                        table.insert(emptyS, {b = b, s = s, id = id})
-                    end
-                end
-            else
-                -- Empty slots
-                table.insert(emptyS, {b = b, s = s, id = id})
-                if b == 0 then
-                    table.insert(availableBag0Slots, s) -- Already empty slots in bag 0
-                end
-            end
-        end
-    end
-
-    -- Sort available bag 0 slots in ascending order
-    table.sort(availableBag0Slots)
-
-    print("|cffffd200[Attune Helper]|r Found " .. #mythic .. " mythic items to sort.")
-    print("|cffffd200[Attune Helper]|r Available bag 0 slots: " .. table.concat(availableBag0Slots, ", "))
-
-    -- Function to safely move items
-    local function MoveItem(fromBag, fromSlot, toBag, toSlot)
-        if GetContainerItemID(fromBag, fromSlot) then
-            PickupContainerItem(fromBag, fromSlot)
-            if GetContainerItemID(toBag, toSlot) then
-                -- Target slot has item, need to swap
-                PickupContainerItem(toBag, toSlot)
-                PickupContainerItem(fromBag, fromSlot)
-            else
-                -- Target slot is empty
-                PickupContainerItem(toBag, toSlot)
-            end
-        end
-    end
-
-    -- Step 1: Move ignored mythic items out of bag 0
-    for _, item in ipairs(ignoredM) do
-        if #emptyS > 0 then
-            local target = table.remove(emptyS)
-            if target then
-                MoveItem(item.b, item.s, target.b, target.s)
-                print("|cffffd200[Attune Helper]|r Moved ignored mythic: " .. (item.name or "Unknown"))
-            end
-        end
-    end
-
-    -- Step 2: Move non-mythic items out of bag 0
-    for _, item in ipairs(bagZ) do
-        if #emptyS > 0 then
-            local target = table.remove(emptyS)
-            if target then
-                MoveItem(item.b, item.s, target.b, target.s)
-                print("|cffffd200[Attune Helper]|r Moved non-mythic: " .. (item.name or "Unknown"))
-            end
-        end
-    end
-
-    -- Step 3: Move mythic items to bag 0 using our pre-calculated available slots
-    local mythicsMoved = 0
-    local slotIndex = 1
-
-    for _, item in ipairs(mythic) do
-        if not item.alreadyInBag0 and slotIndex <= #availableBag0Slots then
-            local targetSlot = availableBag0Slots[slotIndex]
-            MoveItem(item.b, item.s, 0, targetSlot)
-            mythicsMoved = mythicsMoved + 1
-            print("|cffffd200[Attune Helper]|r Moved mythic to bag 0 slot " .. targetSlot .. ": " .. (item.name or "Unknown"))
-            slotIndex = slotIndex + 1
-        elseif not item.alreadyInBag0 then
-            print("|cffff0000[Attune Helper]|r No more available slots in bag 0 for: " .. (item.name or "Unknown"))
-        end
-    end
-
-    print("|cffffd200[Attune Helper]|r Sorting complete. Moved " .. mythicsMoved .. " mythic items to bag 0.")
-end)
-
--- Helper function to get items that would be vendored
-local function GetQualifyingVendorItems()
-    local itemsToVendor = {}
-    local boeScanTT = nil
-
-    local function IsBoEUnboundForVendorCheck(itemID, bag, slot_idx)
-        if not itemID then return false end
-        if not boeScanTT then
-            boeScanTT = CreateFrame("GameTooltip", "AHBoEScanVendor", UIParent, "GameTooltipTemplate")
-        end
-        boeScanTT:SetOwner(UIParent, "ANCHOR_NONE")
-        boeScanTT:SetHyperlink("item:" .. itemID)
-        local isBoE = false
-        for i = 1, boeScanTT:NumLines() do
-            local lt = _G[boeScanTT:GetName() .. "TextLeft" .. i]
-            if lt and string.find(lt:GetText() or "", "Binds when equipped") then
-                isBoE = true
-                break
-            end
-        end
-        if isBoE and bag and slot_idx then
-            boeScanTT:SetOwner(UIParent, "ANCHOR_NONE")
-            boeScanTT:SetBagItem(bag, slot_idx)
-            for i = 1, boeScanTT:NumLines() do
-                local lt = _G[boeScanTT:GetName() .. "TextLeft" .. i]
-                if lt and string.find(lt:GetText() or "", "Soulbound") then
-                    boeScanTT:Hide()
-                    return false -- It's BoE but already bound
-                end
-            end
-        end
-        boeScanTT:Hide()
-        return isBoE -- True if BoE and not found to be Soulbound (or not enough info to tell it's bound from bag item)
-    end
-
-    for b = 0, 4 do
-        for s = 1, GetContainerNumSlots(b) do
-            local link = GetContainerItemLink(b, s)
-            local id = GetContainerItemID(b, s)
-
-            if link and id then
-                local n, itemLinkFull, q, _, _, _, _, _, itemTexture, sellP = GetItemInfo(link)
-                if n then
-                    local skip = false
-
-                    if sellP == nil or sellP == 0 then
-                        skip = true
-                    end
-
-                    if not skip and AHIgnoreList[n] then
-                        skip = true
-                        print_debug_vendor_preview("GetQualifying: Skipping (AHIgnore): " .. n)
-                    end
-
-                    if not skip and AHSetList[n] then
-                        skip = true
-                        print_debug_vendor_preview("GetQualifying: Skipping (AHSet): " .. n)
-                    end
-
-                    if not skip and GetNumEquipmentSets then
-                        for i = 1, GetNumEquipmentSets() do
-                            local _, _, sID = GetEquipmentSetInfo(i)
-                            if sID then
-                                local ids = {GetEquipmentSetItemIDs(sID)}
-                                for _, idS in ipairs(ids) do
-                                    if idS and idS ~= 0 and idS == id then
-                                        skip = true
-                                        break
-                                    end
-                                end
-                            end
-                            if skip then break end
-                        end
-                         if skip then print_debug_vendor_preview("GetQualifying: Skipping (In Equip Set): " .. n) end
-                    end
-
-                    if not skip then
-                        local thisVariantProgress = 0
-                        if _G.GetItemLinkAttuneProgress then
-                            local progress = GetItemLinkAttuneProgress(link)
-                            if type(progress) == "number" then
-                                thisVariantProgress = progress
-                            else
-                                print_debug_vendor_preview("GetQualifying: GetItemLinkAttuneProgress returned non-number for " .. link .. ": " .. tostring(progress))
-                                thisVariantProgress = 0
-                            end
-                        else
-                            print_debug_vendor_preview("GetQualifying: GetItemLinkAttuneProgress API not available for " .. link)
-                            thisVariantProgress = 0
-                        end
-
-                        local isThisVariantFullyAttuned = (thisVariantProgress >= 100)
-
-                        if not isThisVariantFullyAttuned then
-                            print_debug_vendor_preview("GetQualifying: Skipping " .. n .. " - this variant only " .. thisVariantProgress .. "% attuned")
-                            skip = true
-                        else
-                            print_debug_vendor_preview("GetQualifying: " .. n .. " - this variant is " .. thisVariantProgress .. "% attuned, eligible for selling consideration")
-                        end
-                    end
-
-                    if not skip then
-                        local isBoEU = IsBoEUnboundForVendorCheck(id, b, s)
-                        local isM = id >= MYTHIC_MIN_ITEMID
-                        local noSellBoE = (AttuneHelperDB["Do Not Sell BoE Items"] == 1 and isBoEU)
-                        local sellM = (AttuneHelperDB["Sell Attuned Mythic Gear?"] == 1)
-                        local doSell=(isM and sellM) or not isM
-
-                        if doSell and not noSellBoE then
-                            table.insert(itemsToVendor, {
-                                name = n,
-                                link = link, -- Store the specific link from the bag
-                                id = id,
-                                -- icon = itemTexture, -- Icon will be fetched dynamically for tooltips/popups
-                                quality = q,
-                                bag = b,
-                                slot = s
-                            })
-                            print_debug_vendor_preview("GetQualifying: Adding to list: " .. n)
-                        else
-                           print_debug_vendor_preview("GetQualifying: Skipping due to BoE/Mythic rules: " .. n .. " (doSell="..tostring(doSell)..", noSellBoE="..tostring(noSellBoE)..")")
-                        end
-                    end
-                end
-            end
-        end
-    end
-    print_debug_vendor_preview("GetQualifyingVendorItems found " .. #itemsToVendor .. " items.")
-    return itemsToVendor
-end
-
-local function SellQualifiedItemsFromDialog(itemsToSellFromDialog)
-    if not MerchantFrame:IsShown() then
-        print_debug_vendor_preview("SellQualifiedItemsFromDialog: Merchant frame not shown.")
-        return
-    end
-    if #itemsToSellFromDialog == 0 then
-        print_debug_vendor_preview("SellQualifiedItemsFromDialog: No items to sell.")
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffd200[Attune Helper]|r No items to vendor based on current settings.")
-        return
-    end
-
-    local limitSelling = (AttuneHelperDB["Limit Selling to 12 Items?"] == 1)
-    local maxSellCount = limitSelling and 12 or #itemsToSellFromDialog
-    local soldCount = 0
-
-    print_debug_vendor_preview("SellQualifiedItemsFromDialog: Attempting to sell up to " .. maxSellCount .. " items.")
-
-    for i = 1, math.min(#itemsToSellFromDialog, maxSellCount) do
-        local item = itemsToSellFromDialog[i]
-        if item and item.bag and item.slot then
-            local currentItemLinkInSlot = GetContainerItemLink(item.bag, item.slot)
-            if currentItemLinkInSlot and currentItemLinkInSlot == item.link then -- Check if item is still there
-                UseContainerItem(item.bag, item.slot)
-                soldCount = soldCount + 1
-                print("|cffffd200[Attune Helper]|r Sold: " .. item.name)
-                print_debug_vendor_preview("SellQualifiedItemsFromDialog: Sold " .. item.name .. " from bag " .. item.bag .. ", slot " .. item.slot)
-            else
-                print_debug_vendor_preview("SellQualifiedItemsFromDialog: Item " .. item.name .. " no longer at bag " .. item.bag .. ", slot " .. item.slot .. " or changed. Skipping.")
-            end
-        else
-            print_debug_vendor_preview("SellQualifiedItemsFromDialog: Error - item record invalid for selling: " .. tostring(item and item.name or "Unknown"))
-        end
-    end
-
-    if soldCount > 0 then
-        DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffffd200[Attune Helper]|r Sold %d item(s).", soldCount))
-    else
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffd200[Attune Helper]|r No items were actually sold (they might have been moved or settings changed).")
-    end
-end
-
-StaticPopupDialogs["AH_VENDOR_CONFIRM"] = {
-  text = "%s", -- Will be formatted with the list of items
-  button1 = "Sell",
-  button2 = "Cancel",
-  OnAccept = function(self, data) -- Added self parameter
-    if data and data.itemsToSell then
-        SellQualifiedItemsFromDialog(data.itemsToSell)
-    end
-  end,
-  OnCancel = function()
-    print_debug_vendor_preview("Vendor confirmation cancelled.")
-  end,
-  timeout = 0,
-  whileDead = 1,
-  hideOnEscape = 1,
-  preferredIndex = 3,
-  -- Make the dialog wider to accommodate icons and text
-  maxWidth = 450, -- Increased width
-  minWidth = 350,
-}
-
-VendorAttunedButton = CreateButton("AttuneHelperVendorAttunedButton",AttuneHelper,"Vendor Attuned",SortInventoryButton,"BOTTOM",0,-27,nil,nil,nil,1.3)
-VendorAttunedButton:SetScript("OnClick",function(self) -- self is the button clicked
-    if not MerchantFrame:IsShown() then
-        print_debug_vendor_preview("VendorAttunedButton: Merchant frame not shown.")
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[Attune Helper]|r You must have a merchant window open to vendor items.")
-        return
-    end
-
-    local itemsToSell = GetQualifyingVendorItems()
-    if #itemsToSell == 0 then
-        print_debug_vendor_preview("VendorAttunedButton: No items qualify for vendoring.")
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffd200[Attune Helper]|r No items to vendor based on current settings.")
-        return
-    end
-
-    if AttuneHelperDB["EnableVendorSellConfirmationDialog"] == 1 then
-        local confirmText = "|cffffd200The following items will be sold:|r\n\n"
-        local itemCountInPopup = 0
-        for i, itemData in ipairs(itemsToSell) do
-            if i <= 10 then -- Limit items shown in popup text to avoid excessive length and allow space for icons
-                local _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(itemData.link) -- Fetch icon dynamically
-                local iconString = ""
-                if itemTexture then
-                    iconString = string.format("|T%s:16:16:0:0:64:64:4:60:4:60|t ", itemTexture) -- Added offsets for better spacing
-                end
-                -- The itemData.link already contains quality coloring and is mouseoverable
-                confirmText = confirmText .. iconString .. (itemData.link or itemData.name) .. "\n"
-                itemCountInPopup = itemCountInPopup + 1
-            else
-                confirmText = confirmText .. "\n|cffcccccc...and " .. (#itemsToSell - itemCountInPopup) .. " more items.|r"
-                break
-            end
-        end
-        confirmText = confirmText .. "\n\nAre you sure you want to sell these items?"
-        StaticPopup_Show("AH_VENDOR_CONFIRM", confirmText, nil, {itemsToSell = itemsToSell})
-        print_debug_vendor_preview("VendorAttunedButton: Showing confirmation dialog for " .. #itemsToSell .. " items.")
-    else
-        -- Sell directly without confirmation
-        print_debug_vendor_preview("VendorAttunedButton: Selling directly, confirmation dialog disabled.")
-        SellQualifiedItemsFromDialog(itemsToSell)
-    end
-end)
-
-=======
         if not isSoulbound then
             return false, "Not soulbound"
         end
@@ -2274,7 +1853,6 @@ VendorAttunedButton:SetScript("OnClick",function(self) -- self is the button cli
     end
 end)
 
->>>>>>> Stashed changes
 
 ApplyButtonTheme(AttuneHelperDB["Button Theme"])
 AttuneHelperItemCountText=AttuneHelper:CreateFontString(nil,"OVERLAY","GameFontNormal") AttuneHelperItemCountText:SetPoint("BOTTOM",0,6) AttuneHelperItemCountText:SetFont("Fonts\\FRIZQT__.TTF",13,"OUTLINE") AttuneHelperItemCountText:SetTextColor(1,1,1,1) AttuneHelperItemCountText:SetText("Attunables in Inventory: 0")
