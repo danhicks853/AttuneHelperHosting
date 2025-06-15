@@ -1297,29 +1297,52 @@ SortInventoryButton:SetScript("OnClick", function()
         includeBankBags = true
         print("|cffffd200[Attune Helper]|r Bank is open - including bank bags in sort.")
     end
+	
+	-- Gather all items from all equipment sets
+    local setItems = {}
+    local numSets = GetNumEquipmentSets()
+
+    for i = 1, numSets do
+        local name, icon, setID = GetEquipmentSetInfo(i)
+        if setID then
+            local itemIDs = GetEquipmentSetItemIDs(name)
+            for slot, itemID in pairs(itemIDs) do
+                if itemID and itemID > 0 then
+                    setItems[itemID] = name
+                end
+            end
+        end
+    end
+
 
     -- Enhanced function to check if item is ready for disenchanting
     local function IsReadyForDisenchant(itemId, itemLink, itemName, bag, slot)
         if not itemId or not itemLink or not itemName then 
             return false, "Missing item data"
         end
-
+		
         -- Check 1: Must be Mythic
         if not IsMythic(itemId) then
             return false, "Not mythic"
         end
-
-        -- Check 2: Must not be in ignore list
+		
+		-- Check 2: Must not be part of a set
+		if setItems[itemId] then
+			--print(itemLink .. " is part of set: " .. setItems[itemId])
+			return false, "Part of a set"
+		end
+		
+        -- Check 3: Must not be in ignore list
         if ignoredL[string.lower(itemName)] then
             return false, "In AHIgnore list"
         end
 
-        -- Check 3: Must not be in AHSet list
+        -- Check 4: Must not be in AHSet list
         if AHSetList[itemName] then
             return false, "In AHSet list"
         end
 
-        -- Check 4: Must be soulbound
+        -- Check 5: Must be soulbound
         local isSoulbound = false
         local boundScanTT = CreateFrame("GameTooltip", "AttuneHelperBoundScanTooltip", UIParent, "GameTooltipTemplate")
         boundScanTT:SetOwner(UIParent, "ANCHOR_NONE")
@@ -1346,7 +1369,7 @@ SortInventoryButton:SetScript("OnClick", function()
             return false, "Not soulbound"
         end
 
-        -- Check 5: Must be 100% attuned
+        -- Check 6: Must be 100% attuned
         local progress = 0
         if _G.GetItemLinkAttuneProgress then
             local progressResult = GetItemLinkAttuneProgress(itemLink)
@@ -1628,24 +1651,26 @@ local function GetQualifyingVendorItems()
                     end
 
                     -- Check equipment sets
-                    if not skip and GetNumEquipmentSets then
-                        local inEquipSet = false
-                        for i = 1, GetNumEquipmentSets() do
-                            local _, _, sID = GetEquipmentSetInfo(i)
-                            if sID then
-                                local ids = {GetEquipmentSetItemIDs(sID)}
-                                for _, idS in ipairs(ids) do
-                                    if idS and idS ~= 0 and idS == id then
-                                        inEquipSet = true
-                                        break
-                                    end
-                                end
-                            end
-                            if inEquipSet then break end
-                        end
-                        if inEquipSet then
+					if not skip then
+						local setItems = {}
+						local numSets = GetNumEquipmentSets()
+
+						for i = 1, numSets do
+							local name, icon, setID = GetEquipmentSetInfo(i)
+							if setID then
+								local itemIDs = GetEquipmentSetItemIDs(name)
+								for slot, itemID in pairs(itemIDs) do
+									if itemID and itemID > 0 then
+										setItems[itemID] = name
+									end
+								end
+							end
+						end
+					
+                        if  setItems[id] then
                             skip = true
                             skipReason = "In Equipment Set"
+							--print(link .. " is part of set: " .. setItems[id])
                             print_debug_vendor_preview("GetQualifying: Skipping " .. n .. " - " .. skipReason)
                         end
                     end
