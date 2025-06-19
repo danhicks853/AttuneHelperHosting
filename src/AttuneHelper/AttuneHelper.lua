@@ -312,6 +312,19 @@ end
 local function ShouldPrioritizeItem(item1Link, item2Link)
     if not item1Link or not item2Link then return false end
 
+    -- Check if low ilvl priority is enabled
+    local prioritizeLowIlvl = (AttuneHelperDB["Prioritize Low iLvl for Auto-Equip"] == 1)
+    
+    if prioritizeLowIlvl then
+        -- Get item levels
+        local _, _, _, ilvl1 = GetItemInfo(item1Link)
+        local _, _, _, ilvl2 = GetItemInfo(item2Link)
+        
+        if ilvl1 and ilvl2 and ilvl1 ~= ilvl2 then
+            return ilvl1 < ilvl2
+        end
+    end
+
     -- Get forge levels
     local forge1 = GetForgeLevelFromLink(item1Link)
     local forge2 = GetForgeLevelFromLink(item2Link)
@@ -526,10 +539,10 @@ local function InitializeDefaultSettings()
         for keyName, defaultValue in pairs(defaultForgeKeysAndValues) do AttuneHelperDB.AllowedForgeTypes[keyName] = defaultValue end
     end
     local generalOptionDefaults = {
-        ["Sell Attuned Mythic Gear?"] = 0, ["Auto Equip Attunable After Combat"] = 0, ["Do Not Sell BoE Items"] = 0,
+        ["Sell Attuned Mythic Gear?"] = 0, ["Auto Equip Attunable After Combat"] = 0, ["Do Not Sell BoE Items"] = 1,
         ["Limit Selling to 12 Items?"] = 0, ["Disable Auto-Equip Mythic BoE"] = 1, ["Equip BoE Bountied Items"] = 0,
-        ["Mini Mode"] = 0, ["EquipNewAffixesOnly"] = 0,
-        ["EnableVendorSellConfirmationDialog"] = 1 -- New name, default to enabled
+        ["Mini Mode"] = 0, ["EquipNewAffixesOnly"] = 0, ["Prioritize Low iLvl for Auto-Equip"] = 1,
+        ["EnableVendorSellConfirmationDialog"] = 1
     }
     for optName, defValue in pairs(generalOptionDefaults) do
         if AttuneHelperDB[optName] == nil then AttuneHelperDB[optName] = defValue end
@@ -831,6 +844,7 @@ local general_options_list_for_checkboxes={
     {text = "Disable Auto-Equip Mythic BoE", dbKey = "Disable Auto-Equip Mythic BoE"},
     {text = "Equip BoE Bountied Items", dbKey = "Equip BoE Bountied Items"},
     {text = "Equip New Affixes Only", dbKey = "EquipNewAffixesOnly"},
+    {text = "Prioritize Low iLvl for Auto-Equip", dbKey = "Prioritize Low iLvl for Auto-Equip"},
     {text = "Enable Vendor Sell Confirmation Dialog", dbKey = "EnableVendorSellConfirmationDialog"} -- UPDATED OPTION
 }
 
