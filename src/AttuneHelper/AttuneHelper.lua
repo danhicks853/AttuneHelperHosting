@@ -1,6 +1,7 @@
 AHIgnoreList = AHIgnoreList or {}
 AHSetList = AHSetList or {} -- Now stores itemName = "TargetSlotName"
 AttuneHelperDB = AttuneHelperDB or {}
+AHCharSettings = AHCharSettings or {} -- Character-specific settings
 
 -- ****** DEBUGGING TOGGLE ******
 local GENERAL_DEBUG_MODE = false -- Set to true for original broad debug messages
@@ -517,7 +518,20 @@ local function InitializeDefaultSettings()
     if AttuneHelperDB["Mini Mode"] == nil then AttuneHelperDB["Mini Mode"] = 0 end
     if AttuneHelperDB["FramePosition"] == nil then AttuneHelperDB["FramePosition"] = { "CENTER", UIParent, "CENTER", 0, 0 } end
     if AttuneHelperDB["MiniFramePosition"] == nil then AttuneHelperDB["MiniFramePosition"] = { "CENTER", UIParent, "CENTER", 0, 0 } end
-    if AttuneHelperDB["Disable Two-Handers"] == nil then AttuneHelperDB["Disable Two-Handers"] = 0 end
+    -- Migrate old account-wide 2H setting to character-specific
+    if AttuneHelperDB["Disable Two-Handers"] ~= nil and AHCharSettings["Two-Handers Only"] == nil then
+        AHCharSettings["Two-Handers Only"] = AttuneHelperDB["Disable Two-Handers"]
+        AttuneHelperDB["Disable Two-Handers"] = nil -- Remove old setting
+        print_debug_general("AttuneHelper: Migrated 'Disable Two-Handers' setting to character-specific 'Two-Handers Only'.")
+    end
+    -- Also migrate from old character setting name if it exists
+    if AHCharSettings["Disable Two-Handers"] ~= nil and AHCharSettings["Two-Handers Only"] == nil then
+        AHCharSettings["Two-Handers Only"] = AHCharSettings["Disable Two-Handers"]
+        AHCharSettings["Disable Two-Handers"] = nil -- Remove old setting
+        print_debug_general("AttuneHelper: Migrated character-specific 'Disable Two-Handers' to 'Two-Handers Only'.")
+    end
+    if AHCharSettings["Two-Handers Only"] == nil then AHCharSettings["Two-Handers Only"] = 0 end
+    if AHCharSettings["Can Dual Wield 2H"] == nil then AHCharSettings["Can Dual Wield 2H"] = 0 end
 
     if AttuneHelperDB["EquipUntouchedVariants"] ~= nil and AttuneHelperDB["EquipNewAffixesOnly"] == nil then
         AttuneHelperDB["EquipNewAffixesOnly"] = AttuneHelperDB["EquipUntouchedVariants"]
@@ -1077,8 +1091,18 @@ EquipAllButton:SetScript("OnClick", function()
         end
 
         if slotName == "SecondaryHandSlot" then
-            if currentMHIs2H then print_debug_general("Cannot equip OH for "..slotName.." because current MH is 2H.") return end
-            if twoHanderEquippedInMainHandThisEquipCycle then print_debug_general("Cannot equip OH for "..slotName.." because a 2H was equipped this cycle.") return end
+            if AHCharSettings["Two-Handers Only"] == 1 and AHCharSettings["Can Dual Wield 2H"] == 0 then
+                print_debug_general("Cannot equip OH for "..slotName.." because /ah2h 2H-only mode is enabled and dual wield 2H is disabled.")
+                return
+            end
+            if currentMHIs2H and AHCharSettings["Can Dual Wield 2H"] == 0 then 
+                print_debug_general("Cannot equip OH for "..slotName.." because current MH is 2H and dual wield 2H is disabled.") 
+                return 
+            end
+            if twoHanderEquippedInMainHandThisEquipCycle and AHCharSettings["Can Dual Wield 2H"] == 0 then 
+                print_debug_general("Cannot equip OH for "..slotName.." because a 2H was equipped this cycle and dual wield 2H is disabled.") 
+                return 
+            end
         end
 
         local invSlotID = GetInventorySlotInfo(slotName) local eqID = slotNumberMapping[slotName] or invSlotID
@@ -1138,11 +1162,35 @@ EquipAllButton:SetScript("OnClick", function()
         -- Try to equip the best candidate
         for _, rec in ipairs(attunableCandidates) do
             local proceed = true
-            if slotName == "MainHandSlot" and rec.equipSlot == "INVTYPE_2HWEAPON" then
-                if not CanEquip2HInMainHandWithoutInterruptingOHAttunement() then proceed = false print_debug_general("    Proceed=false (2H would interrupt OH leveling)") end
+            -- /ah2h logic: when enabled, only equip 2H weapons
+            if slotName == "MainHandSlot" and AHCharSettings["Two-Handers Only"] == 1 then
+                if rec.equipSlot == "INVTYPE_2HWEAPON" then
+                    -- Allow 2H weapons, but check for OH interruption
+                    if not CanEquip2HInMainHandWithoutInterruptingOHAttunement() then 
+                        proceed = false 
+                        print_debug_general("    Proceed=false (2H would interrupt OH leveling)") 
+                    end
+                elseif rec.equipSlot == "INVTYPE_WEAPON" or rec.equipSlot == "INVTYPE_WEAPONMAINHAND" then
+                    -- Block 1H weapons when /ah2h is on
+                    proceed = false
+                    print_debug_general("    Proceed=false (1H weapons blocked by /ah2h 2H-only mode)")
+                end
+            elseif slotName == "MainHandSlot" and rec.equipSlot == "INVTYPE_2HWEAPON" then
+                -- Normal mode: check for OH interruption
+                if not CanEquip2HInMainHandWithoutInterruptingOHAttunement() then 
+                    proceed = false 
+                    print_debug_general("    Proceed=false (2H would interrupt OH leveling)") 
+                end
             end
             if slotName == "SecondaryHandSlot" and cannotEquipOffHandWeaponThisSession and IsWeaponTypeForOffHandCheck(rec.equipSlot) then
                 proceed = false print_debug_general("    Proceed=false (cannotEquipOffHandWeaponThisSession and is weapon type)")
+            end
+            -- Allow 2H weapons in off-hand if dual wielding is enabled and 2H-only mode is on
+            if slotName == "SecondaryHandSlot" and AHCharSettings["Two-Handers Only"] == 1 and AHCharSettings["Can Dual Wield 2H"] == 1 then
+                if rec.equipSlot ~= "INVTYPE_2HWEAPON" then
+                    proceed = false
+                    print_debug_general("    Proceed=false (2H-only mode with dual wield: only 2H weapons allowed in OH)")
+                end
             end
             if proceed then
                 print_debug_general("    Proceeding to equip P2 bag item: " .. rec.link)
@@ -1181,10 +1229,33 @@ EquipAllButton:SetScript("OnClick", function()
                 local equipThisSetItem = false
 
                 if slotName == "MainHandSlot" then
-                    if candidateEquipLoc == "INVTYPE_WEAPON" or candidateEquipLoc == "INVTYPE_2HWEAPON" or candidateEquipLoc == "INVTYPE_WEAPONMAINHAND" then equipThisSetItem = true end
+                    if candidateEquipLoc == "INVTYPE_WEAPON" or candidateEquipLoc == "INVTYPE_2HWEAPON" or candidateEquipLoc == "INVTYPE_WEAPONMAINHAND" then 
+                        if AHCharSettings["Two-Handers Only"] == 1 then
+                            -- /ah2h mode: only allow 2H weapons
+                            if candidateEquipLoc == "INVTYPE_2HWEAPON" then
+                                equipThisSetItem = true
+                            else
+                                equipThisSetItem = false
+                            end
+                        else
+                            equipThisSetItem = true 
+                        end
+                    end
                 elseif slotName == "SecondaryHandSlot" then
-                    if not currentMHIs2H then
-                        if candidateEquipLoc == "INVTYPE_WEAPON" or candidateEquipLoc == "INVTYPE_WEAPONOFFHAND" or candidateEquipLoc == "INVTYPE_SHIELD" or candidateEquipLoc == "INVTYPE_HOLDABLE" then
+                    if AHCharSettings["Two-Handers Only"] == 1 then
+                        if AHCharSettings["Can Dual Wield 2H"] == 1 and candidateEquipLoc == "INVTYPE_2HWEAPON" then
+                            -- /ah2h mode with dual wield: allow 2H weapons in off-hand
+                            equipThisSetItem = true
+                        elseif AHCharSettings["Can Dual Wield 2H"] == 1 then
+                            -- /ah2h mode with dual wield: block non-2H items
+                            equipThisSetItem = false
+                        else
+                            -- /ah2h mode without dual wield: block all off-hand items
+                            equipThisSetItem = false
+                        end
+                    elseif not currentMHIs2H or AHCharSettings["Can Dual Wield 2H"] == 1 then
+                        if candidateEquipLoc == "INVTYPE_WEAPON" or candidateEquipLoc == "INVTYPE_WEAPONOFFHAND" or candidateEquipLoc == "INVTYPE_SHIELD" or candidateEquipLoc == "INVTYPE_HOLDABLE" or 
+                           (candidateEquipLoc == "INVTYPE_2HWEAPON" and AHCharSettings["Can Dual Wield 2H"] == 1) then
                             if currentMHLink_forAHSetOHCheck and currentMHLink_forAHSetOHCheck == rec_set.link then
                                 local mhItemNameForSetCheck, _,_,_,_,_,_,_,_ = GetItemInfo(currentMHLink_forAHSetOHCheck)
                                 if mhItemNameForSetCheck and AHSetList[mhItemNameForSetCheck] == "MainHandSlot" then
@@ -1215,9 +1286,9 @@ EquipAllButton:SetScript("OnClick", function()
                             end
                         end
                         if slotName == "SecondaryHandSlot" then
-                            if currentMHIs2H then
+                            if currentMHIs2H and AHCharSettings["Can Dual Wield 2H"] == 0 then
                                 proceed = false
-                                print_debug_ahset(slotName, "Proceed set to false: AHSet OH target ("..rec_set.name.."), but current MH is 2H.")
+                                print_debug_ahset(slotName, "Proceed set to false: AHSet OH target ("..rec_set.name.."), but current MH is 2H and dual wield 2H is disabled.")
                             elseif cannotEquipOffHandWeaponThisSession and IsWeaponTypeForOffHandCheck(rec_set.equipSlot) then
                                 proceed = false
                                 print_debug_ahset(slotName, "Proceed set to false: cannotEquipOffHandWeaponThisSession is true and AHSet item ("..rec_set.name..") is weapon type for OH.")
@@ -2271,7 +2342,7 @@ SLASH_ATTUNEHELPER1="/ath" SlashCmdList["ATTUNEHELPER"]=function(msg)
         if buttonToClick and buttonToClick:GetScript("OnClick") then
             buttonToClick:GetScript("OnClick")(buttonToClick) -- Pass the button itself as 'self'
         end
-    else print("/ath show|hide|reset|equip|sort|vendor")end
+    else print("/ath show|hide|reset|equip|sort|vendor") print("/ah2h - Toggle 2H-only mode") print("/ah2h dw - Toggle dual wield 2H weapons")end
 end
 
 SLASH_AHIGNORE1="/AHIgnore" SlashCmdList["AHIGNORE"]=function(msg)
@@ -2432,7 +2503,17 @@ SLASH_AHSET1="/AHSet" SlashCmdList["AHSET"]=function(msg)
   UpdateItemCountText()
 end
 
-SLASH_ATH2H1="/ah2h" SlashCmdList["ATH2H"]=function()AttuneHelperDB["Disable Two-Handers"]=1-(AttuneHelperDB["Disable Two-Handers"]or 0) print("|cffffd200[AH]|r 2H equipping "..(AttuneHelperDB["Disable Two-Handers"]==1 and"disabled."or"enabled."))end
+SLASH_ATH2H1="/ah2h" SlashCmdList["ATH2H"]=function(msg)
+    local cmd = msg:lower():match("^(%S*)")
+    if cmd == "dw" then
+        AHCharSettings["Can Dual Wield 2H"]=1-(AHCharSettings["Can Dual Wield 2H"]or 0)
+        print("|cffffd200[AH]|r Dual wield 2H weapons "..(AHCharSettings["Can Dual Wield 2H"]==1 and"enabled (character-specific). Can equip 2H weapons in off-hand slot."or"disabled (character-specific). Cannot equip 2H weapons in off-hand slot."))
+    else
+        AHCharSettings["Two-Handers Only"]=1-(AHCharSettings["Two-Handers Only"]or 0)
+        local dwStatus = AHCharSettings["Can Dual Wield 2H"] == 1 and " (dual wield 2H: enabled)" or " (dual wield 2H: disabled)"
+        print("|cffffd200[AH]|r 2H-only mode "..(AHCharSettings["Two-Handers Only"]==1 and"enabled (character-specific). Will ONLY equip 2H weapons"..dwStatus.."."or"disabled (character-specific). Will equip both 1H and 2H weapons normally."))
+    end
+end
 SLASH_AHTOGGLE1="/ahtoggle" SlashCmdList["AHTOGGLE"]=function()AttuneHelperDB["Auto Equip Attunable After Combat"]=1-(AttuneHelperDB["Auto Equip Attunable After Combat"]or 0) print("|cffffd200[AH]|r Auto-Equip After Combat: "..(AttuneHelperDB["Auto Equip Attunable After Combat"]==1 and"|cff00ff00Enabled|r."or"|cffff0000Disabled|r.")) for _,cb in ipairs(general_option_checkboxes)do if cb.dbKey=="Auto Equip Attunable After Combat"then cb:SetChecked(AttuneHelperDB["Auto Equip Attunable After Combat"]==1) break end end end
 SLASH_AHSETLIST1="/ahsetlist" SlashCmdList["AHSETLIST"]=function()local c=0 print("|cffffd200[AH]|r AHSetList Items:") for n,s_val in pairs(AHSetList)do if s_val then print("- "..n .. " (Slot: " .. tostring(s_val) .. ")") c=c+1 end end if c==0 then print("|cffffd200[AH]|r No items in AHSetList.")end end
 -- local merchF=CreateFrame("Frame") merchF:RegisterEvent("MERCHANT_SHOW") merchF:RegisterEvent("MERCHANT_UPDATE") merchF:SetScript("OnEvent",function(_,e)if e=="MERCHANT_SHOW"or e=="MERCHANT_UPDATE"then for i=1,GetNumBuybackItems()do local l=GetBuybackItemLink(i) if l then local n=GetItemInfo(l) if AHIgnoreList[n]or AHSetList[n]then BuybackItem(i) print("|cffff0000[AH]|r Bought back: "..n) return end end end end end)
