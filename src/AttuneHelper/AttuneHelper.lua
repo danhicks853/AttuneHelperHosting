@@ -2435,6 +2435,36 @@ end
 SLASH_ATH2H1="/ah2h" SlashCmdList["ATH2H"]=function()AttuneHelperDB["Disable Two-Handers"]=1-(AttuneHelperDB["Disable Two-Handers"]or 0) print("|cffffd200[AH]|r 2H equipping "..(AttuneHelperDB["Disable Two-Handers"]==1 and"disabled."or"enabled."))end
 SLASH_AHTOGGLE1="/ahtoggle" SlashCmdList["AHTOGGLE"]=function()AttuneHelperDB["Auto Equip Attunable After Combat"]=1-(AttuneHelperDB["Auto Equip Attunable After Combat"]or 0) print("|cffffd200[AH]|r Auto-Equip After Combat: "..(AttuneHelperDB["Auto Equip Attunable After Combat"]==1 and"|cff00ff00Enabled|r."or"|cffff0000Disabled|r.")) for _,cb in ipairs(general_option_checkboxes)do if cb.dbKey=="Auto Equip Attunable After Combat"then cb:SetChecked(AttuneHelperDB["Auto Equip Attunable After Combat"]==1) break end end end
 SLASH_AHSETLIST1="/ahsetlist" SlashCmdList["AHSETLIST"]=function()local c=0 print("|cffffd200[AH]|r AHSetList Items:") for n,s_val in pairs(AHSetList)do if s_val then print("- "..n .. " (Slot: " .. tostring(s_val) .. ")") c=c+1 end end if c==0 then print("|cffffd200[AH]|r No items in AHSetList.")end end
+SLASH_AHSETALL1="/ahsetall" SlashCmdList["AHSETALL"]=function()
+	AHSetList = {}
+	print("|cffffd200[AttuneHelper]|r Deleted previous AHSetList Items.")
+	local slotsList = {"HeadSlot","NeckSlot","ShoulderSlot","BackSlot","ChestSlot","WristSlot","HandsSlot","WaistSlot","LegsSlot","FeetSlot","Finger0Slot","Finger1Slot","Trinket0Slot","Trinket1Slot","MainHandSlot","SecondaryHandSlot","RangedSlot"}
+	for i, slotName in ipairs(slotsList) do
+		local invSlotID = GetInventorySlotInfo(slotName) local eqID = slotNumberMapping[slotName] or invSlotID
+		local equippedItemLink = GetInventoryItemLink("player", invSlotID)
+		local equippedItemName, equippedItemEquipLoc
+		if equippedItemLink then
+			print_debug_general(slotName .. " has equipped: " .. equippedItemLink)
+			local equippedItemId = GetItemIDFromLink(equippedItemLink)
+			equippedItemName, _,_,_,_,_,_,_,equippedItemEquipLoc = GetItemInfo(equippedItemLink)
+			AHSetList[equippedItemName] = slotName
+			print("|cffffd200[AH]|r '" .. equippedItemName .. "' added to AHSet, designated for slot " .. slotName .. ".")
+		else
+			print_debug_general(slotName .. " is empty.")
+		end
+	end
+	local c=0 print("|cffffd200[AH]|r New AHSetList Items:") 
+	for n,s_val in pairs(AHSetList)do 
+		if s_val then 
+			print("- "..n .. " (Slot: " .. tostring(s_val) .. ")") c=c+1 
+		end
+	end
+	if c==0 then 
+		print("|cffffd200[AH]|r No items in AHSetList.")
+	end
+	for i=0,4 do UpdateBagCache(i) end
+	UpdateItemCountText()
+end
 -- local merchF=CreateFrame("Frame") merchF:RegisterEvent("MERCHANT_SHOW") merchF:RegisterEvent("MERCHANT_UPDATE") merchF:SetScript("OnEvent",function(_,e)if e=="MERCHANT_SHOW"or e=="MERCHANT_UPDATE"then for i=1,GetNumBuybackItems()do local l=GetBuybackItemLink(i) if l then local n=GetItemInfo(l) if AHIgnoreList[n]or AHSetList[n]then BuybackItem(i) print("|cffff0000[AH]|r Bought back: "..n) return end end end end end)
 
 AttuneHelper:RegisterEvent("ADDON_LOADED") AttuneHelper:RegisterEvent("PLAYER_REGEN_DISABLED") AttuneHelper:RegisterEvent("PLAYER_REGEN_ENABLED") AttuneHelper:RegisterEvent("PLAYER_LOGIN") AttuneHelper:RegisterEvent("BAG_UPDATE") AttuneHelper:RegisterEvent("UI_ERROR_MESSAGE") 

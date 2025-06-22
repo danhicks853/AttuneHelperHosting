@@ -80,7 +80,8 @@ Plus—choose from multiple backgrounds, colors, button themes, and even a **Min
 
 ### AHSet (Fallback Gear)
 ```text
-/AHSet <itemlink> [slot|remove]   — Toggle item in AHSetList  
+/AHSet <itemlink> [slot|remove]   — Toggle item in AHSetList
+/ahsetall                         - Resets AHSet and adds all currently eequipped items 
 /ahsetlist                        — List all AHSet items
 ```
 - **slot** can be `mh`/`oh` or exact slot names (`HeadSlot`, `Finger1Slot`, etc.).  
