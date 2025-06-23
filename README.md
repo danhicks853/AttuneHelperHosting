@@ -38,6 +38,7 @@ A powerful WoW addon designed to streamline the attunement process by automatica
 
 ### 📋 Requirements
 - **WoW Version:** 3.3.5a (WotLK)
+- Synastria.org
 
 ## 📖 Usage Guide
 
