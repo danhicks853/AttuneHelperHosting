@@ -5,7 +5,7 @@ local AH = _G.AttuneHelper
 AH.bagSlotCache   = AH.bagSlotCache   or setmetatable({}, {__mode = "v"})
 AH.equipSlotCache = AH.equipSlotCache or setmetatable({}, {__mode = "v"})
 
--- ʕ •ᴥ•ʔ✿ GetItemInfo cache with weak references to prevent memory bloat ✿ ʕ •ᴥ•ʔ
+-- ʕ •ᴥ•ʔ✿ GetItemInfo cache with weak references to reduce memory bloat ✿ ʕ •ᴥ•ʔ
 AH.itemInfoCache = AH.itemInfoCache or setmetatable({}, {__mode = "v"})
 AH.lastItemInfoCleanup = AH.lastItemInfoCleanup or 0
 AH.ITEMINFO_CACHE_CLEANUP_INTERVAL = 30 -- Clean every 30 seconds
@@ -29,6 +29,10 @@ local function GetCachedItemInfo(link)
         local name, _, _, _, _, _, _, _, equipLoc = GetItemInfo(link)
         if name then
             AH.itemInfoCache[link] = {name, equipLoc}
+        elseif not name then
+            local id = CustomExtractItemId(link)
+            local name, _, _, _, _, _, _, _, equipLoc = GetItemInfoCustom(id)
+            AH.itemInfoCache[link] = {name, equipLoc}
         end
     end
     
@@ -38,8 +42,7 @@ end
 
 ------------------------------------------------------------------------
 -- UpdateBagCache(bagID)
--- Replicates the behaviour from the monolithic file but stores the
--- results in AH.bagSlotCache / AH.equipSlotCache.
+-- stores the results in AH.bagSlotCache / AH.equipSlotCache.
 ------------------------------------------------------------------------
 function AH.UpdateBagCache(bagID)
     -- Skip bank bags (5-11 on WotLK)
