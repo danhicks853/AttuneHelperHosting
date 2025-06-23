@@ -691,6 +691,19 @@ function AH.InitializeThemeOptions()
     
     table.insert(AH.general_option_checkboxes, miniModeCheckbox)
     AH.theme_option_controls.miniModeCheckbox = miniModeCheckbox
+    
+    -- ʕ •ᴥ•ʔ✿ Hide Disenchant Button Checkbox ✿ ʕ •ᴥ•ʔ
+    local hideDisenchantCheckbox = AH.CreateCheckbox("Hide Disenchant Button", themePanel, 16, yOffset - 35, true, "Hide Disenchant Button")
+    hideDisenchantCheckbox:SetPoint("TOPLEFT", miniModeCheckbox, "BOTTOMLEFT", 0, -10)
+
+    hideDisenchantCheckbox:SetScript("OnClick", function(self)
+        AttuneHelperDB["Hide Disenchant Button"] = self:GetChecked() and 1 or 0
+        AH.SaveSettingsForced()
+        AH.UpdateDisenchantButtonVisibility()
+    end)
+    
+    table.insert(AH.general_option_checkboxes, hideDisenchantCheckbox)
+    AH.theme_option_controls.hideDisenchantCheckbox = hideDisenchantCheckbox
 end
 
 ------------------------------------------------------------------------

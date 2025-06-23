@@ -315,23 +315,18 @@ function AH.SlashCommand(msg)
     
     if msg == "help" then
         print("|cff00ff00[AttuneHelper]|r Available commands:")
-        print("|cff00ff00/ah help|r - Show this help")
-        print("|cff00ff00/ah toggle|r - Toggle auto-equip after combat")
-        print("|cff00ff00/ah togglemini|r - Toggle mini/full mode")
-        print("|cff00ff00/ah memory|r - Show memory usage")
-        print("|cff00ff00/ah cleanup|r - Force memory cleanup")
-        print("|cff00ff00/ah equip [slot]|r - Equip items for specific slot")
-        print("|cff00ff00/ah blacklist [slot]|r - Toggle slot blacklist")
-        print("|cff00ff00/ah weapons|r - Show weapon type settings")
-        print("|cff00ff00/ah mh1h|r - Toggle MainHand 1H weapons")
-        print("|cff00ff00/ah mh2h|r - Toggle MainHand 2H weapons")
-        print("|cff00ff00/ah oh1h|r - Toggle OffHand 1H weapons")
-        print("|cff00ff00/ah oh2h|r - Toggle OffHand 2H weapons")
-        print("|cff00ff00/ah ohshield|r - Toggle OffHand shields")
-        print("|cff00ff00/ah ohhold|r - Toggle OffHand holdables")
-        print("|cff00ff00/ah show|r - Show main frame")
-        print("|cff00ff00/ah hide|r - Hide main frame")
-        print("|cff00ff00/ah reset|r - Reset frame position")
+        print("  |cffffd200/ah show|r - Show AttuneHelper frame")
+        print("  |cffffd200/ah hide|r - Hide AttuneHelper frame")
+        print("  |cffffd200/ah toggle|r - Toggle auto-equip after combat")
+        print("  |cffffd200/ah togglemini|r - Toggle mini/full mode")
+        print("  |cffffd200/ah reset|r - Reset frame positions to center")
+        print("  |cffffd200/ah hidede|r - Toggle disenchant button visibility")
+        print("  |cffffd200/ah memory|r - Show memory usage")
+        print("  |cffffd200/ah cleanup|r - Force memory cleanup")
+        print("  |cffffd200/ah weapons|r - Show weapon control settings")
+        print("  |cffffd200/ah blacklist <slot>|r - Toggle slot blacklist")
+        print("  |cffffd200/ahbl <slot>|r - Toggle slot blacklist (short)")
+        print("  |cffffd200/ahtoggle|r - Toggle auto-equip (alias)")
         return
     end
     
@@ -438,23 +433,20 @@ function AH.SlashCommand(msg)
     end
     
     if msg == "reset" then
-        -- Reset frame positions to default
-        AttuneHelperDB.FramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
-        AttuneHelperDB.MiniFramePosition = { "CENTER", UIParent, "CENTER", 0, 0 }
+        -- Reset frame positions to center
+        AttuneHelperDB["FramePosition"] = { "CENTER", UIParent, "CENTER", 0, 0 }
+        AttuneHelperDB["MiniFramePosition"] = { "CENTER", UIParent, "CENTER", 0, 0 }
         
-        -- Reset main frame position
         if AH.UI.mainFrame then
             AH.UI.mainFrame:ClearAllPoints()
             AH.UI.mainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         end
-        
-        -- Reset mini frame position
         if AH.UI.miniFrame then
             AH.UI.miniFrame:ClearAllPoints()
             AH.UI.miniFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         end
         
-        print("|cff00ff00[AttuneHelper]|r Frame positions reset to default")
+        print("|cffffd200[AH]|r Frame positions reset to center.")
         AH.ForceSaveSettings()
         return
     end
@@ -509,6 +501,19 @@ function AH.SlashCommand(msg)
     if msg == "ohhold" then
         AttuneHelperDB["Allow OffHand Holdables"] = 1 - (AttuneHelperDB["Allow OffHand Holdables"] or 0)
         print("|cff00ff00[AttuneHelper]|r OffHand holdables " .. (AttuneHelperDB["Allow OffHand Holdables"] == 1 and "|cff00ff00enabled|r" or "|cffff0000disabled|r"))
+        AH.ForceSaveSettings()
+        return
+    end
+
+    -- ʕ •ᴥ•ʔ✿ Toggle disenchant button visibility ✿ ʕ •ᴥ•ʔ
+    if msg == "hidede" or msg == "hidebutton" then
+        AttuneHelperDB["Hide Disenchant Button"] = 1 - (AttuneHelperDB["Hide Disenchant Button"] or 0)
+        local isHidden = AttuneHelperDB["Hide Disenchant Button"] == 1
+        print("|cffffd200[AH]|r Disenchant button " .. (isHidden and "|cffff0000hidden|r" or "|cff00ff00shown|r"))
+        
+        if AH.UpdateDisenchantButtonVisibility then
+            AH.UpdateDisenchantButtonVisibility()
+        end
         AH.ForceSaveSettings()
         return
     end

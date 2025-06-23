@@ -193,6 +193,7 @@ function AH.InitializeDefaultSettings()
         ["EquipNewAffixesOnly"] = 0, 
         ["Prioritize Low iLvl for Auto-Equip"] = 1,
         ["EnableVendorSellConfirmationDialog"] = 1,
+        ["Hide Disenchant Button"] = 0,  -- ʕ •ᴥ•ʔ✿ Show disenchant button by default ✿ ʕ •ᴥ•ʔ
         -- ʕ •ᴥ•ʔ✿ Weapon type control options ✿ ʕ •ᴥ•ʔ
         ["Allow MainHand 1H Weapons"] = 1,
         ["Allow MainHand 2H Weapons"] = 1,
@@ -242,3 +243,31 @@ function AH.ToggleSlotBlacklist(slotName)
     AH.ForceSaveSettings()
 end
 _G.ToggleSlotBlacklist = AH.ToggleSlotBlacklist
+
+------------------------------------------------------------------------
+-- ʕ •ᴥ•ʔ✿ Disenchant button visibility control ✿ ʕ •ᴥ•ʔ
+------------------------------------------------------------------------
+function AH.UpdateDisenchantButtonVisibility()
+    local shouldHide = AttuneHelperDB["Hide Disenchant Button"] == 1
+    
+    -- Hide/show main frame disenchant button
+    if _G.AttuneHelperSortInventoryButton then
+        if shouldHide then
+            _G.AttuneHelperSortInventoryButton:Hide()
+        else
+            _G.AttuneHelperSortInventoryButton:Show()
+        end
+    end
+    
+    -- Hide/show mini frame disenchant button
+    if _G.AttuneHelperMiniSortButton then
+        if shouldHide then
+            _G.AttuneHelperMiniSortButton:Hide()
+        else
+            _G.AttuneHelperMiniSortButton:Show()
+        end
+    end
+    
+    AH.print_debug_general(string.format("Disenchant buttons %s", shouldHide and "hidden" or "shown"))
+end
+_G.UpdateDisenchantButtonVisibility = AH.UpdateDisenchantButtonVisibility
