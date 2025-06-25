@@ -517,56 +517,265 @@ _G.EquipAllAttunables = AH.EquipAllAttunables
 function AH.SortInventoryItems()
     print("|cffffd200[AttuneHelper]|r Starting inventory sort...")
     
-    -- ʕ •ᴥ•ʔ✿ Basic sort implementation - moves mythic items to bag 0 ✿ ʕ •ᴥ•ʔ
-    local itemsToMove = {}
-    local emptySlots = {}
+    -- ʕ •ᴥ•ʔ✿ Determine target bag based on user preference ✿ ʕ •ᴥ•ʔ
+    local targetBag = (AttuneHelperDB["Use Bag 1 for Disenchant"] == 1) and 1 or 0
+    local targetBagName = "bag " .. targetBag
     
-    -- Find empty slots in bag 0
-    for slot = 1, GetContainerNumSlots(0) do
-        if not GetContainerItemID(0, slot) then
-            table.insert(emptySlots, slot)
+    local readyForDisenchant, emptySlots, ignoredList = {}, {}, {}
+
+    -- Build ignored list (case-insensitive)
+    if AHIgnoreList then
+        for name in pairs(AHIgnoreList) do
+            ignoredList[string.lower(name)] = true
         end
     end
+
+    -- Determine which bags to scan
+    local bagsToScan = {0, 1, 2, 3, 4}
+    local includeBankBags = false
     
-    -- Find mythic items in other bags
-    for bag = 1, 4 do
-        for slot = 1, GetContainerNumSlots(bag) do
-            local itemID = GetContainerItemID(bag, slot)
-            if itemID and AH.IsMythic(itemID) then
-                local link = GetContainerItemLink(bag, slot)
-                local name = GetItemInfo(itemID)
-                if link and name then
-                    table.insert(itemsToMove, {
-                        bag = bag,
-                        slot = slot,
-                        itemID = itemID,
-                        name = name,
-                        link = link
-                    })
+    -- Check if bank is open (bank bags are 5-11 in WotLK)
+    if BankFrame and BankFrame:IsShown() then
+        for bankBag = 5, 11 do
+            table.insert(bagsToScan, bankBag)
+        end
+        includeBankBags = true
+        print("|cffffd200[Attune Helper]|r Bank is open - including bank bags in sort.")
+    end
+    
+    -- Gather all items from equipment sets
+    local setItems = {}
+    local numSets = GetNumEquipmentSets()
+    for i = 1, numSets do
+        local name, icon, setID = GetEquipmentSetInfo(i)
+        if setID then
+            local itemIDs = GetEquipmentSetItemIDs(name)
+            for slot, itemID in pairs(itemIDs) do
+                if itemID and itemID > 0 then
+                    setItems[itemID] = name
                 end
             end
         end
     end
-    
-    if #itemsToMove == 0 then
-        print("|cffffd200[AttuneHelper]|r No mythic items found to sort.")
-        return
+
+    -- Enhanced function to check if item is ready for disenchanting
+    local function IsReadyForDisenchant(itemId, itemLink, itemName, bag, slot)
+        if not itemId or not itemLink or not itemName then 
+            return false, "Missing item data"
+        end
+        
+        -- Check 1: Must be Mythic
+        if not AH.IsMythic(itemId) then
+            return false, "Not mythic"
+        end
+        
+        -- Check 2: Must not be part of an equipment set
+        if setItems[itemId] then
+            return false, "Part of equipment set: " .. setItems[itemId]
+        end
+        
+        -- Check 3: Must not be in ignore list
+        if ignoredList[string.lower(itemName)] then
+            return false, "In AHIgnore list"
+        end
+
+        -- Check 4: Must not be in AHSet list
+        if AHSetList and AHSetList[itemName] then
+            return false, "In AHSet list"
+        end
+
+        -- Check 5: Must be soulbound
+        local isSoulbound = false
+        local tooltip = CreateFrame("GameTooltip", "AttuneHelperDisenchantBoundScan", UIParent, "GameTooltipTemplate")
+        tooltip:SetOwner(UIParent, "ANCHOR_NONE")
+        
+        if bag and slot then
+            tooltip:SetBagItem(bag, slot)
+        else
+            tooltip:SetHyperlink(itemLink)
+        end
+        
+        for i = 1, tooltip:NumLines() do
+            local line = _G["AttuneHelperDisenchantBoundScanTextLeft" .. i]
+            if line then
+                local text = line:GetText()
+                if text and string.find(text, "Soulbound", 1, true) then
+                    isSoulbound = true
+                    break
+                end
+            end
+        end
+        tooltip:Hide()
+
+        if not isSoulbound then
+            return false, "Not soulbound"
+        end
+
+        -- Check 6: Must be 100% attuned
+        local progress = 0
+        if _G.GetItemLinkAttuneProgress then
+            local progressResult = GetItemLinkAttuneProgress(itemLink)
+            if type(progressResult) == "number" then
+                progress = progressResult
+            else
+                AH.print_debug_general("IsReadyForDisenchant: GetItemLinkAttuneProgress returned non-number for " .. itemLink .. ": " .. tostring(progressResult))
+                return false, "Cannot determine attunement progress"
+            end
+        else
+            AH.print_debug_general("IsReadyForDisenchant: GetItemLinkAttuneProgress API not available for " .. itemLink)
+            return false, "Attunement API not available"
+        end
+
+        if progress < 100 then
+            return false, "Not fully attuned (" .. progress .. "%)"
+        end
+
+        return true, "Ready for disenchant"
     end
-    
-    if #emptySlots < #itemsToMove then
-        print("|cffff0000[AttuneHelper]|r Not enough empty slots in bag 0. Need " .. #itemsToMove .. " but only have " .. #emptySlots .. ".")
-        return
-    end
-    
-    -- Move items
-    local moved = 0
-    for i, item in ipairs(itemsToMove) do
-        if i <= #emptySlots then
-            PickupContainerItem(item.bag, item.slot)
-            PickupContainerItem(0, emptySlots[i])
-            moved = moved + 1
+
+    -- Check for enough empty slots
+    local emptyCount = 0
+    for _, b in ipairs(bagsToScan) do
+        for s = 1, GetContainerNumSlots(b) do
+            if not GetContainerItemID(b, s) then
+                emptyCount = emptyCount + 1
+                table.insert(emptySlots, {b = b, s = s})
+            end
         end
     end
+
+    local requiredEmptySlots = includeBankBags and 16 or 8
+    if emptyCount < requiredEmptySlots then
+        print("|cffff0000[Attune Helper]|r Need at least " .. requiredEmptySlots .. " empty slots for sorting" .. (includeBankBags and " (including bank)" or "") .. ".")
+        return
+    end
+
+    -- Track which slots in target bag will become available
+    local availableTargetSlots = {}
+
+    -- Scan all bags and categorize items
+    for _, b in ipairs(bagsToScan) do
+        for s = 1, GetContainerNumSlots(b) do
+            local id = GetContainerItemID(b, s)
+            if id then
+                local link = GetContainerItemLink(b, s)
+                local name = GetItemInfo(id)
+                
+                if link and name then
+                    local isReady, reason = IsReadyForDisenchant(id, link, name, b, s)
+                    
+                    if b == targetBag then
+                        -- Items currently in target bag
+                        if not isReady then
+                            -- Non-disenchant-ready items in target bag (need to move out)
+                            table.insert(availableTargetSlots, s)
+                            AH.print_debug_general("Target " .. targetBagName .. " item '" .. name .. "' will be moved out: " .. reason)
+                        else
+                            -- Disenchant-ready items already in target bag (leave them)
+                            table.insert(readyForDisenchant, {b = b, s = s, id = id, name = name, link = link, alreadyInTarget = true})
+                            AH.print_debug_general("Target " .. targetBagName .. " item '" .. name .. "' is ready for disenchant and staying in place")
+                        end
+                    else
+                        -- Items in other bags
+                        if isReady then
+                            -- Items ready for disenchanting (need to move to target bag)
+                            table.insert(readyForDisenchant, {b = b, s = s, id = id, name = name, link = link, fromBank = (b >= 5)})
+                            AH.print_debug_general("Found disenchant-ready item in bag " .. b .. ": " .. name)
+                        else
+                            AH.print_debug_general("Item '" .. name .. "' not ready for disenchant: " .. reason)
+                        end
+                    end
+                end
+            else
+                -- Empty slots
+                if b == targetBag then
+                    table.insert(availableTargetSlots, s)
+                end
+            end
+        end
+    end
+
+    -- Sort available target bag slots in ascending order
+    table.sort(availableTargetSlots)
+
+    local itemsFromBank = 0
+    local itemsFromRegularBags = 0
+    for _, item in ipairs(readyForDisenchant) do
+        if not item.alreadyInTarget then
+            if item.fromBank then 
+                itemsFromBank = itemsFromBank + 1 
+            else 
+                itemsFromRegularBags = itemsFromRegularBags + 1 
+            end
+        end
+    end
+
+    print("|cffffd200[Attune Helper]|r Found " .. #readyForDisenchant .. " items ready for disenchanting" ..
+          (itemsFromBank > 0 and " (" .. itemsFromBank .. " from bank, " .. itemsFromRegularBags .. " from regular bags)" or 
+           itemsFromRegularBags > 0 and " (" .. itemsFromRegularBags .. " from regular bags)" or "") .. ".")
     
-    print("|cffffd200[AttuneHelper]|r Moved " .. moved .. " mythic items to bag 0.")
+    if #availableTargetSlots > 0 then
+        print("|cffffd200[Attune Helper]|r Available " .. targetBagName .. " slots: " .. table.concat(availableTargetSlots, ", "))
+    end
+
+    -- Function to safely move items
+    local function MoveItem(fromBag, fromSlot, toBag, toSlot)
+        if GetContainerItemID(fromBag, fromSlot) then
+            PickupContainerItem(fromBag, fromSlot)
+            if GetContainerItemID(toBag, toSlot) then
+                -- Target slot has item, need to swap
+                PickupContainerItem(toBag, toSlot)
+                PickupContainerItem(fromBag, fromSlot)
+            else
+                -- Target slot is empty
+                PickupContainerItem(toBag, toSlot)
+            end
+        end
+    end
+
+    -- Step 1: Move non-disenchant-ready items out of target bag to make room
+    local nonReadyMoved = 0
+    for s = 1, GetContainerNumSlots(targetBag) do
+        local id = GetContainerItemID(targetBag, s)
+        if id then
+            local link = GetContainerItemLink(targetBag, s)
+            local name = GetItemInfo(id)
+            
+            if link and name then
+                local isReady, reason = IsReadyForDisenchant(id, link, name, targetBag, s)
+                if not isReady and #emptySlots > 0 then
+                    local target = table.remove(emptySlots)
+                    if target then
+                        MoveItem(targetBag, s, target.b, target.s)
+                        nonReadyMoved = nonReadyMoved + 1
+                        print("|cffffd200[Attune Helper]|r Moved non-disenchant item from " .. targetBagName .. ": " .. name .. " (" .. reason .. ")")
+                    end
+                end
+            end
+        end
+    end
+
+    -- Step 2: Move disenchant-ready items to target bag
+    local disenchantItemsMoved = 0
+    local slotIndex = 1
+
+    for _, item in ipairs(readyForDisenchant) do
+        if not item.alreadyInTarget and slotIndex <= #availableTargetSlots then
+            local targetSlot = availableTargetSlots[slotIndex]
+            MoveItem(item.b, item.s, targetBag, targetSlot)
+            disenchantItemsMoved = disenchantItemsMoved + 1
+            print("|cffffd200[Attune Helper]|r Moved disenchant-ready item to " .. targetBagName .. " slot " .. targetSlot .. ": " .. 
+                  item.name .. (item.fromBank and " (from bank)" or ""))
+            slotIndex = slotIndex + 1
+        elseif not item.alreadyInTarget then
+            print("|cffff0000[Attune Helper]|r No more available slots in " .. targetBagName .. " for: " .. item.name)
+        end
+    end
+
+    print("|cffffd200[Attune Helper]|r Prepare Disenchant complete. Moved " .. disenchantItemsMoved .. 
+          " disenchant-ready items to " .. targetBagName .. (nonReadyMoved > 0 and ", moved " .. nonReadyMoved .. " other items out of " .. targetBagName or "") .. ".")
+    
+    if disenchantItemsMoved == 0 and #readyForDisenchant == 0 then
+        print("|cffffd200[Attune Helper]|r No items found that are 100% attuned, soulbound, mythic, and not in ignore/set lists.")
+    end
 end 

@@ -252,6 +252,18 @@ function AH.SetupMiniButtonHandlers()
                     _G.SortInventoryButton:GetScript("OnClick")()
                 end
             end)
+            
+            -- Setup detailed tooltip for mini sort button
+            AH.UI.miniButtons.sort:SetScript("OnEnter", function(s)
+                GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Prepare Disenchant")
+                local targetBag = (AttuneHelperDB["Use Bag 1 for Disenchant"] == 1) and 1 or 0
+                GameTooltip:AddLine("Moves fully attuned mythic items to bag " .. targetBag .. ".", 1, 1, 1, true)
+                GameTooltip:AddLine("Clears target bag first, then fills with disenchant-ready items.", 0.7, 0.7, 0.7, true)
+                GameTooltip:AddLine("Items must be: Mythic, 100% attuned, soulbound, not in sets/ignore lists.", 0.6, 0.8, 1, true)
+                GameTooltip:Show()
+            end)
+            AH.UI.miniButtons.sort:SetScript("OnLeave", GameTooltip_Hide)
         end
 
         if AH.UI.miniButtons and AH.UI.miniButtons.vendor and _G.VendorAttunedButton then

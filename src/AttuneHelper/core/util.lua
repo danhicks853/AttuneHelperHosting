@@ -194,6 +194,7 @@ function AH.InitializeDefaultSettings()
         ["Prioritize Low iLvl for Auto-Equip"] = 1,
         ["EnableVendorSellConfirmationDialog"] = 1,
         ["Hide Disenchant Button"] = 0,  -- ʕ •ᴥ•ʔ✿ Show disenchant button by default ✿ ʕ •ᴥ•ʔ
+        ["Use Bag 1 for Disenchant"] = 0,  -- ʕ •ᴥ•ʔ✿ Use bag 0 by default ✿ ʕ •ᴥ•ʔ
         -- ʕ •ᴥ•ʔ✿ Weapon type control options ✿ ʕ •ᴥ•ʔ
         ["Allow MainHand 1H Weapons"] = 1,
         ["Allow MainHand 2H Weapons"] = 1,
