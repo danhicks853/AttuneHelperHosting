@@ -33,7 +33,8 @@ AH.general_options_list_for_checkboxes = {
     {text = "Equip BoE Bountied Items", dbKey = "Equip BoE Bountied Items"},
     {text = "Equip New Affixes Only", dbKey = "EquipNewAffixesOnly"},
     {text = "Prioritize Low iLvl for Auto-Equip", dbKey = "Prioritize Low iLvl for Auto-Equip"},
-    {text = "Enable Vendor Sell Confirmation Dialog", dbKey = "EnableVendorSellConfirmationDialog"}
+    {text = "Enable Vendor Sell Confirmation Dialog", dbKey = "EnableVendorSellConfirmationDialog"},
+    {text = "Use Bag 1 for Disenchant", dbKey = "Use Bag 1 for Disenchant"}
 }
 
 -- ʕ •ᴥ•ʔ✿ Weapon control options (separate panel) ✿ ʕ •ᴥ•ʔ

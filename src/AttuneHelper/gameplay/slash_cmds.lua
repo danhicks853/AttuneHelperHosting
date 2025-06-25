@@ -321,8 +321,7 @@ function AH.SlashCommand(msg)
         print("  |cffffd200/ah togglemini|r - Toggle mini/full mode")
         print("  |cffffd200/ah reset|r - Reset frame positions to center")
         print("  |cffffd200/ah hidede|r - Toggle disenchant button visibility")
-        print("  |cffffd200/ah memory|r - Show memory usage")
-        print("  |cffffd200/ah cleanup|r - Force memory cleanup")
+        print("  |cffffd200/ah bag|r - Toggle disenchant target bag (0 or 1)")
         print("  |cffffd200/ah weapons|r - Show weapon control settings")
         print("  |cffffd200/ah blacklist <slot>|r - Toggle slot blacklist")
         print("  |cffffd200/ahbl <slot>|r - Toggle slot blacklist (short)")
@@ -514,6 +513,13 @@ function AH.SlashCommand(msg)
         if AH.UpdateDisenchantButtonVisibility then
             AH.UpdateDisenchantButtonVisibility()
         end
+        AH.ForceSaveSettings()
+        return
+    end
+
+    if msg == "bag" then
+        AttuneHelperDB["Use Bag 1 for Disenchant"] = 1 - (AttuneHelperDB["Use Bag 1 for Disenchant"] or 0)
+        print("|cffffd200[AH]|r Disenchant target bag: " .. (AttuneHelperDB["Use Bag 1 for Disenchant"] == 1 and "Bag 1" or "Bag 0"))
         AH.ForceSaveSettings()
         return
     end
