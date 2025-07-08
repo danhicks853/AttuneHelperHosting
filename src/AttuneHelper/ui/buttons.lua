@@ -23,7 +23,7 @@ function AH.CreateButton(n, p, t, a, ap, x, y, w, h, c, s)
     b:SetSize(w, h)
     b:SetScale(s)
     b:SetPoint(ap, a, ap, x, y)
-    b:SetText(t)
+    b:SetText(AH.t(t))
     
     local thA = AttuneHelperDB["Button Theme"] or "Normal"
     if AH.themePaths[thA] then
@@ -134,12 +134,12 @@ function AH.SetupMainButtonHandlers()
     -- Equip All Button tooltip
     AH.UI.buttons.equipAll:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Equip Attunables")
+        GameTooltip:SetText(AH.t("Equip Attunables"))
         
         -- Add detailed list with icons
         local attunableData = AH.GetAttunableItemNamesList()
         local count = #attunableData
-        GameTooltip:AddLine(string.format("Attunable Items: %d", count), 1, 1, 0)
+        GameTooltip:AddLine(string.format(AH.t("Attunable Items: %d"), count), 1, 1, 0)
         
         if count > 0 then
             GameTooltip:AddLine(" ") -- Empty line for spacing
@@ -171,11 +171,11 @@ function AH.SetupMainButtonHandlers()
                 -- Check forge level
                 local forgeLevel = AH.GetForgeLevelFromLink and AH.GetForgeLevelFromLink(itemData.link) or 0
                 if forgeLevel == (AH.FORGE_LEVEL_MAP and AH.FORGE_LEVEL_MAP.WARFORGED or 2) then
-                    table.insert(indicators, "|cff9900FF[WF]|r")
+                    table.insert(indicators, "|cffFFA680[WF]|r")
                 elseif forgeLevel == (AH.FORGE_LEVEL_MAP and AH.FORGE_LEVEL_MAP.LIGHTFORGED or 3) then
-                    table.insert(indicators, "|cffFFD700[LF]|r")
+                    table.insert(indicators, "|cffFFFFA6[LF]|r")
                 elseif forgeLevel == (AH.FORGE_LEVEL_MAP and AH.FORGE_LEVEL_MAP.TITANFORGED or 1) then
-                    table.insert(indicators, "|cff00CCFF[TF]|r")
+                    table.insert(indicators, "|cff8080FF[TF]|r")
                 end
 
                 -- Combine name with indicators
@@ -202,10 +202,10 @@ function AH.SetupMainButtonHandlers()
     -- Sort Inventory Button tooltip
     AH.UI.buttons.sort:SetScript("OnEnter", function(self) 
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT") 
-        GameTooltip:SetText("Prepare Disenchant")
+        GameTooltip:SetText(AH.t("Prepare Disenchant"))
         local targetBag = (AttuneHelperDB["Use Bag 1 for Disenchant"] == 1) and 1 or 0
-        GameTooltip:AddLine("Moves fully attuned mythic items to bag " .. targetBag .. ".", 1, 1, 1, true)
-        GameTooltip:AddLine("Clears target bag first, then fills with disenchant-ready items.", 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(string.format(AH.t("Moves fully attuned mythic items to bag %d."), targetBag), 1, 1, 1, true)
+        GameTooltip:AddLine(AH.t("Clears target bag first, then fills with disenchant-ready items."), 0.7, 0.7, 0.7, true)
         GameTooltip:Show() 
     end)
     AH.UI.buttons.sort:SetScript("OnLeave", function() 
@@ -220,11 +220,11 @@ function AH.SetupMainButtonHandlers()
     -- Vendor Attuned Button tooltip
     AH.UI.buttons.vendor:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Vendor Attuned Items")
+        GameTooltip:SetText(AH.t("Vendor Attuned Items"))
         local itemsToVendor = AH.GetQualifyingVendorItems and AH.GetQualifyingVendorItems() or {}
 
         if #itemsToVendor > 0 then
-            GameTooltip:AddLine(string.format("Items to be sold (%d):", #itemsToVendor), 1, 1, 0) -- Yellow
+            GameTooltip:AddLine(string.format(AH.t("Items to be sold (%d):"), #itemsToVendor), 1, 1, 0) -- Yellow
             for _, itemData in ipairs(itemsToVendor) do
                 local _, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(itemData.link)
                 local iconText = ""
@@ -237,11 +237,11 @@ function AH.SetupMainButtonHandlers()
                 GameTooltip:AddLine(iconText .. itemData.name, r, g, b, true)
             end
         else
-            GameTooltip:AddLine("No items will be sold based on current settings.", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(AH.t("No items will be sold based on current settings."), 0.8, 0.8, 0.8, true)
         end
 
         if not (MerchantFrame and MerchantFrame:IsShown()) then
-            GameTooltip:AddLine("Open merchant window to sell these items.", 1, 0.8, 0.2, true) -- Orange/Yellowish
+            GameTooltip:AddLine(AH.t("Open merchant window to sell these items."), 1, 0.8, 0.2, true) -- Orange/Yellowish
         end
         GameTooltip:Show()
     end)

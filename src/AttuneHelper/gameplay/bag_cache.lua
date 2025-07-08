@@ -31,7 +31,7 @@ local function GetCachedItemInfo(link)
             AH.itemInfoCache[link] = {name, equipLoc}
         elseif not name then
             local id = CustomExtractItemId(link)
-            local name, _, _, _, _, _, _, _, equipLoc = GetItemInfoCustom(id)
+            local name, _, _, _, _, _, _, _, equipLoc = GetItemInfoCustom(id) -- prob fine to cache this like this
             AH.itemInfoCache[link] = {name, equipLoc}
         end
     end

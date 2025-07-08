@@ -7,7 +7,7 @@
 ## SavedVariablesPerCharacter: AHSetList, AHCharSettings
 
 init.lua
-
+core\locale.lua
 core\debug.lua
 core\constants.lua
 core\util.lua
