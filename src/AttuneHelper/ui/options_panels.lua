@@ -74,7 +74,7 @@ function AH.CreateCheckbox(t, p, x, y, iG, dkO)
     
     local txt = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     txt:SetPoint("LEFT", cb, "RIGHT", 4, 0)
-    txt:SetText(t)
+    txt:SetText(AH.t(t))
     
     cb.dbKey = idK
     return cb
@@ -212,6 +212,26 @@ function AH.LoadAllSettings()
     -- ʕ •ᴥ•ʔ✿ Load weapon control checkbox states ✿ ʕ •ᴥ•ʔ
     for _, cb in ipairs(AH.weapon_control_checkboxes) do
         cb:SetChecked(AttuneHelperDB[cb.dbKey or cb:GetName()] == 1)
+    end
+
+    -- Load language dropdown selection
+    if AH.language_option_controls and AH.language_option_controls.dropdown then
+        local sel = AttuneHelperDB["Language"] or "default"
+        local textMap = {
+            ["default"] = AH.t("System Default"),
+            ["enUS"] = AH.t("English (US)"),
+            ["deDE"] = AH.t("Deutsch"),
+            ["esES"] = AH.t("Español"),
+            ["frFR"] = AH.t("Français"),
+            ["itIT"] = AH.t("Italiano"),
+            ["ptBR"] = AH.t("Português (BR)"),
+            ["ruRU"] = AH.t("Русский"),
+            ["zhCN"] = AH.t("简体中文"),
+            ["zhTW"] = AH.t("繁體中文"),
+            ["koKR"] = AH.t("한국어"),
+        }
+        UIDropDownMenu_SetSelectedValue(AH.language_option_controls.dropdown, sel)
+        UIDropDownMenu_SetText(AH.language_option_controls.dropdown, textMap[sel] or sel)
     end
 
     if AH.UpdateDisplayMode then
@@ -705,6 +725,49 @@ function AH.InitializeThemeOptions()
     
     table.insert(AH.general_option_checkboxes, hideDisenchantCheckbox)
     AH.theme_option_controls.hideDisenchantCheckbox = hideDisenchantCheckbox
+
+    -- ʕ •ᴥ•ʔ✿ Language Selection (Theme Panel) ✿ ʕ •ᴥ•ʔ
+    local langLabelT = themePanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    langLabelT:SetPoint("TOPLEFT", hideDisenchantCheckbox, "BOTTOMLEFT", 0, -20)
+    langLabelT:SetText(AH.t("Select Language:"))
+
+    local langDDT = CreateFrame("Frame", "AttuneHelperLanguageDropdownTheme", themePanel, "UIDropDownMenuTemplate")
+    langDDT:SetPoint("TOPLEFT", langLabelT, "BOTTOMLEFT", -16, -8)
+    UIDropDownMenu_SetWidth(langDDT, 180)
+
+    local localeOptions2 = {
+        { code = "default", text = AH.t("System Default") },
+        { code = "enUS",    text = AH.t("English (US)") },
+        { code = "deDE",    text = AH.t("Deutsch") },
+        { code = "esES",    text = AH.t("Español") },
+        { code = "frFR",    text = AH.t("Français") },
+        { code = "itIT",    text = AH.t("Italiano") },
+        { code = "ptBR",    text = AH.t("Português (BR)") },
+        { code = "ruRU",    text = AH.t("Русский") },
+        { code = "zhCN",    text = AH.t("简体中文") },
+        { code = "zhTW",    text = AH.t("繁體中文") },
+        { code = "koKR",    text = AH.t("한국어") },
+    }
+
+    UIDropDownMenu_Initialize(langDDT, function(self)
+        for _, opt in ipairs(localeOptions2) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text  = opt.text
+            info.value = opt.code
+            info.func  = function(btn)
+                UIDropDownMenu_SetSelectedValue(langDDT, btn.value)
+                UIDropDownMenu_SetText(langDDT, btn.text)
+                AH.SetLocale(btn.value)
+                AH.SaveAllSettings()
+            end
+            info.checked = (opt.code == (AttuneHelperDB["Language"] or "default"))
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+
+    -- Register for later LoadAllSettings
+    AH.language_option_controls = AH.language_option_controls or {}
+    AH.language_option_controls.dropdown = langDDT
 end
 
 ------------------------------------------------------------------------

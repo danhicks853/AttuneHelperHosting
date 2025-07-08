@@ -20,7 +20,7 @@ function AH.GetQualifyingVendorItems()
         local isBoE = false
         for i = 1, boeScanTT:NumLines() do
             local lt = _G[boeScanTT:GetName() .. "TextLeft" .. i]
-            if lt and string.find(lt:GetText() or "", "Binds when equipped") then
+            if lt and string.find(lt:GetText() or "", _G.ITEM_BIND_ON_EQUIP) then
                 isBoE = true
                 break
             end
@@ -30,7 +30,7 @@ function AH.GetQualifyingVendorItems()
             boeScanTT:SetBagItem(bag, slot_idx)
             for i = 1, boeScanTT:NumLines() do
                 local lt = _G[boeScanTT:GetName() .. "TextLeft" .. i]
-                if lt and string.find(lt:GetText() or "", "Soulbound") then
+                if lt and string.find(lt:GetText() or "", _G.ITEM_SOULBOUND) then
                     boeScanTT:Hide()
                     return false
                 end

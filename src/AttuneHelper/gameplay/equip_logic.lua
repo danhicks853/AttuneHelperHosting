@@ -124,7 +124,7 @@ function AH.CanEquipItemPolicyCheck(candidateRec)
             willBindScannerTooltip:SetBagItem(itemBag, itemSlotInBag)
             for i = 1, willBindScannerTooltip:NumLines() do
                 local lt = _G[willBindScannerTooltip:GetName().."TextLeft"..i]
-                if lt and string.find(lt:GetText() or "", "Soulbound", 1, true) then
+                if lt and string.find(lt:GetText() or "", ITEM_SOULBOUND, 1, true) then
                     willBindScannerTooltip:Hide()
                     return false
                 end
@@ -136,18 +136,20 @@ function AH.CanEquipItemPolicyCheck(candidateRec)
 
     local itemIsBoENotBound = IsBoEAndNotBound(itemLink, itemBag, itemSlotInBag)
     if itemId then
+        -- ʕ •ᴥ•ʔ✿ Check bounty status first for all items ✿ ʕ •ᴥ•ʔ
         local isBountied = (_G.GetCustomGameData and (_G.GetCustomGameData(31, itemId) or 0) > 0) or false
-        if itemIsBoENotBound and isBountied then
+        if isBountied and itemIsBoENotBound then
             if AttuneHelperDB["Equip BoE Bountied Items"] ~= 1 then
-                AH.print_debug_general("PolicyCheck Fail (BoE Bountied not allowed): " .. itemLink)
+                AH.print_debug_general("PolicyCheck Fail (Bountied item not allowed): " .. itemLink)
                 return false
             end
-        else
-            local isMythic = AH.IsMythic(itemId)
-            if AttuneHelperDB["Disable Auto-Equip Mythic BoE"] == 1 and isMythic and itemIsBoENotBound then
-                AH.print_debug_general("PolicyCheck Fail (Mythic BoE disabled): " .. itemLink)
-                return false
-            end
+        end
+        
+        -- ʕ •ᴥ•ʔ✿ Check mythic BoE restrictions ✿ ʕ •ᴥ•ʔ
+        local isMythic = AH.IsMythic(itemId)
+        if AttuneHelperDB["Disable Auto-Equip Mythic BoE"] == 1 and isMythic and itemIsBoENotBound then
+            AH.print_debug_general("PolicyCheck Fail (Mythic BoE disabled): " .. itemLink)
+            return false
         end
     elseif itemIsBoENotBound then
         AH.print_debug_general("PolicyCheck: No ItemID for BoE checks on "..itemLink..", proceeding with forge check.")
@@ -599,7 +601,7 @@ function AH.SortInventoryItems()
             local line = _G["AttuneHelperDisenchantBoundScanTextLeft" .. i]
             if line then
                 local text = line:GetText()
-                if text and string.find(text, "Soulbound", 1, true) then
+                if text and string.find(text, ITEM_SOULBOUND, 1, true) then
                     isSoulbound = true
                     break
                 end
