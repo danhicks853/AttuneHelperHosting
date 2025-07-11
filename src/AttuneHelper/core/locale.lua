@@ -39,25 +39,25 @@ local enUS = {
     ["Items must be: Mythic, 100% attuned, soulbound, not in sets/ignore lists."] = "Items must be: Mythic, 100% attuned, soulbound, not in sets/ignore lists.",
 }
 
-local esES = { -- AI GENERATED NO VERIFICATION
-    ["Equip Attunables"]      = "Equipar sintonizables",
+local esES = { -- Reviewed by LiquidAP and Moonlight
+    ["Equip Attunables"]      = "Equipar sincronizables",
     ["Prepare Disenchant"]    = "Preparar desencantar",
-    ["Vendor Attuned"]        = "Vender sintonizado",
-    ["Vendor Attuned Items"]  = "Vender objetos sintonizados",
+    ["Vendor Attuned"]        = "Vender sincronizados",
+    ["Vendor Attuned Items"]  = "Vender objetos sincronizados",
     ["System Default"]        = "Predeterminado del sistema",
     ["English (US)"]          = "Inglés (EE.UU.)",
     ["Español"]               = "Español",
     ["Deutsch"]               = "Alemán",
     ["Select Language:"]      = "Seleccionar idioma:",
-    ["Moves fully attuned mythic items to bag %d."] = "Mueve los objetos míticos totalmente sintonizados a la bolsa %d.",
+    ["Moves fully attuned mythic items to bag %d."] = "Mueve los objetos míticos totalmente sincronizados a la bolsa %d.",
     ["Clears target bag first, then fills with disenchant-ready items."] = "Vacía primero la bolsa objetivo y luego la llena con objetos listos para desencantar.",
-    ["Attunable Items: %d"]    = "Objetos sintonizables: %d",
-    ["Qualifying Attunables (%d):"] = "Sintonizables cualificados (%d):",
-    ["No qualifying attunables in bags."] = "No hay sintonizables cualificados en las bolsas.",
+    ["Attunable Items: %d"]    = "Objetos sincronizables: %d",
+    ["Qualifying Attunables (%d):"] = "Sincronizables elegibles (%d):",
+    ["No qualifying attunables in bags."] = "No hay sincronizables elegibles en las bolsas.",
     ["Items to be sold (%d):"] = "Objetos a vender (%d):",
     ["No items will be sold based on current settings."] = "No se venderán objetos según la configuración actual.",
     ["Open merchant window to sell these items."] = "Abre la ventana del vendedor para vender estos objetos.",
-    ["Items must be: Mythic, 100% attuned, soulbound, not in sets/ignore lists."] = "Los objetos deben ser: míticos, 100% sintonizados, ligados, no en conjuntos/listas de ignorados.",
+    ["Items must be: Mythic, 100% attuned, soulbound, not in sets/ignore lists."] = "Los objetos deben ser míticos y estar: 100% sincronizados, ligados, fuera de conjuntos/listas de ignorados.",
 }
 
 local deDE = { -- AI GENERATED NO VERIFICATION

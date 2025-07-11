@@ -99,6 +99,7 @@ A powerful WoW addon designed to streamline the attunement process by automatica
 | `/ahsetall` | Add all currently equipped items to set |
 | `/ahignore <itemlink>` | Toggle item ignore status |
 | `/ahignorelist` | List all ignored items |
+| `/ahtogglerecycle` | Toggle between selling or keeping attuned white and grey items |
 
 ### 🚫 Slot Blacklisting
 | Command | Description |

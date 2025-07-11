@@ -156,6 +156,7 @@ function AH.InitializeDefaultSettings()
     if AttuneHelperDB["MiniFramePosition"] == nil then AttuneHelperDB["MiniFramePosition"] = { "CENTER", UIParent, "CENTER", 0, 0 } end
     if AttuneHelperDB["Disable Two-Handers"] == nil then AttuneHelperDB["Disable Two-Handers"] = 0 end
     if AttuneHelperDB["Language"] == nil then AttuneHelperDB["Language"] = "default" end
+	if AttuneHelperDB["Vendor Attuned Grey And White Items"] == nil then AttuneHelperDB["Vendor Attuned Grey And White Items"] = 0 end
 
     -- Handle legacy setting migration
     if AttuneHelperDB["EquipUntouchedVariants"] ~= nil and AttuneHelperDB["EquipNewAffixesOnly"] == nil then
@@ -190,6 +191,7 @@ function AH.InitializeDefaultSettings()
         ["Limit Selling to 12 Items?"] = 0, 
         ["Disable Auto-Equip Mythic BoE"] = 1, 
         ["Equip BoE Bountied Items"] = 0,
+		["Vendor Attuned Grey And White Items"] = 0,
         ["Mini Mode"] = 0, 
         ["EquipNewAffixesOnly"] = 0, 
         ["Prioritize Low iLvl for Auto-Equip"] = 1,

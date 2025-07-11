@@ -308,6 +308,12 @@ SlashCmdList["AHBLL"] = function()
     end
 end
 
+SLASH_AHTOGGLERECYCLE1 = "/ahtogglerecycle"
+SlashCmdList["AHTOGGLERECYCLE"] = function()
+    AttuneHelperDB["Vendor Attuned Grey And White Items"] = 1 - (AttuneHelperDB["Vendor Attuned Grey And White Items"] or 0)
+    print("|cffffd200[AH]|r Vendor Attuned Grey And White Items: " .. (AttuneHelperDB["Vendor Attuned Grey And White Items"] == 1 and "|cff00ff00Enabled|r." or "|cffff0000Disabled|r."))
+end
+
 function AH.SlashCommand(msg)
     if not msg then return end
     
