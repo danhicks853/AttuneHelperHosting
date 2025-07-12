@@ -28,6 +28,7 @@ AH.general_options_list_for_checkboxes = {
     {text = "Sell Attuned Mythic Gear?", dbKey = "Sell Attuned Mythic Gear?"},
     {text = "Auto Equip Attunable After Combat", dbKey = "Auto Equip Attunable After Combat"},
     {text = "Do Not Sell BoE Items", dbKey = "Do Not Sell BoE Items"},
+	{text = "Do Not Sell Grey And White Items", dbKey = "Do Not Sell Grey And White Items"},
     {text = "Limit Selling to 12 Items?", dbKey = "Limit Selling to 12 Items?"},
     {text = "Disable Auto-Equip Mythic BoE", dbKey = "Disable Auto-Equip Mythic BoE"},
     {text = "Equip BoE Bountied Items", dbKey = "Equip BoE Bountied Items"},
